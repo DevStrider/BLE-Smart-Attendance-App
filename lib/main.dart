@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'dart:async';
 import 'dart:math';
+
 void main() {
   runApp(const MyApp());
 }
@@ -9,93 +10,18 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'BLE Scanner',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const BLEScannerScreen(), // Changed from MyHomePage to BLEScannerScreen
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      _counter++;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-
-    return Scaffold(
-      appBar: AppBar(
-
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-
-        title: Text(widget.title),
-      ),
-      body: Center(
-
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
-    );
-  }
-}
-/////////////////////////////////////////////////////////////////
 class BLEScannerScreen extends StatefulWidget {
   const BLEScannerScreen({super.key});
 
@@ -108,12 +34,19 @@ class _BLEScannerScreenState extends State<BLEScannerScreen> {
   bool _isScanning = false;
   StreamSubscription<List<ScanResult>>? _scanSubscription;
 
-  // Distance calculation function
   double _calculateDistance(int rssi, {int txPower = -59}) {
     if (rssi == 0) return -1.0;
     return pow(10, (txPower - rssi) / 20).toDouble();
   }
-
+  @override
+  void initState() {
+    super.initState();
+    FlutterBluePlus.adapterState.listen((state) {
+      if (state == BluetoothAdapterState.on) {
+        _startScan();
+      }
+    });
+  }
   @override
   void dispose() {
     _scanSubscription?.cancel();
@@ -157,14 +90,43 @@ class _BLEScannerScreenState extends State<BLEScannerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('BLE Scanner')),
-      body: ListView.builder(
+      appBar: AppBar(
+        title: const Text('BLE Scanner'),
+        actions: [
+          IconButton(
+            icon: Icon(_isScanning ? Icons.stop : Icons.search),
+            onPressed: _isScanning ? _stopScan : _startScan,
+          )
+        ],
+      ),
+      body: _devices.isEmpty
+          ? Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.bluetooth, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              'No devices found',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Tap the search button to scan',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+        ),
+      )
+          : ListView.builder(
         itemCount: _devices.length,
         itemBuilder: (context, index) {
           final device = _devices[index];
           return ListTile(
-            title: Text(device.name ?? 'Unknown'),
+            leading: const Icon(Icons.bluetooth),
+            title: Text(device.name ?? 'Unknown Device'),
             subtitle: Text(device.id.toString()),
+            trailing: const Icon(Icons.chevron_right),
             onTap: () {
               Navigator.push(
                 context,
@@ -178,11 +140,12 @@ class _BLEScannerScreenState extends State<BLEScannerScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _isScanning ? null : _startScan,
-        child: const Icon(Icons.search),
-      ),
     );
+  }
+
+  void _stopScan() {
+    FlutterBluePlus.stopScan();
+    setState(() => _isScanning = false);
   }
 }
 
@@ -193,7 +156,7 @@ class BeaconDetailsScreen extends StatefulWidget {
   const BeaconDetailsScreen({
     super.key,
     required this.device,
-    this.initialRssi = -59, // Make optional with default value
+    this.initialRssi = -59,
   });
 
   @override
@@ -206,7 +169,6 @@ class _BeaconDetailsScreenState extends State<BeaconDetailsScreen> {
   Timer? _rssiTimer;
   int? _currentRssi;
 
-  // Distance calculation (same as scanner)
   double _calculateDistance(int rssi, {int txPower = -59}) {
     if (rssi == 0) return -1.0;
     return pow(10, (txPower - rssi) / 20).toDouble();
@@ -255,36 +217,73 @@ class _BeaconDetailsScreenState extends State<BeaconDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Device Details')),
-      body: Center(
+      appBar: AppBar(
+        title: Text(widget.device.name ?? 'Device Details'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(
-              _isConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
-              size: 50,
-              color: _isConnected ? Colors.blue : Colors.grey,
-            ),
-            const SizedBox(height: 20),
-            Text('Device: ${widget.device.name ?? 'Unknown'}'),
-            Text('ID: ${widget.device.id}'),
-            const SizedBox(height: 20),
-            if (_currentRssi != null) Text('RSSI: $_currentRssi dBm'),
-            if (_distance != null) ...[
-              Text('Distance: ${_distance!.toStringAsFixed(2)} meters'),
-              Text(
-                _distance! <= 8.0 ? 'Attendance Recorded' : 'Too Far Away',
-                style: TextStyle(
-                  color: _distance! <= 8.0 ? Colors.green : Colors.red,
-                  fontWeight: FontWeight.bold,
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.bluetooth,
+                          color: _isConnected ? Colors.blue : Colors.grey,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _isConnected ? 'Connected' : 'Disconnected',
+                          style: TextStyle(
+                            color: _isConnected ? Colors.blue : Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _buildInfoRow('Device ID:', widget.device.id.toString()),
+                    if (_currentRssi != null)
+                      _buildInfoRow('Signal Strength:', '$_currentRssi dBm'),
+                    if (_distance != null) ...[
+                      _buildInfoRow('Distance:', '${_distance!.toStringAsFixed(2)} meters'),
+                      const SizedBox(height: 16),
+                      Text(
+                        _distance! <= 8.0 ? '✅ In Range' : '❌ Too Far',
+                        style: TextStyle(
+                          color: _distance! <= 8.0 ? Colors.green : Colors.red,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-            ],
+            ),
           ],
         ),
       ),
     );
   }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(width: 8),
+          Text(value),
+        ],
+      ),
+    );
+  }
 }
-
-
