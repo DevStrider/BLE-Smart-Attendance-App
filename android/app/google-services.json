@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "533725282912",
+    "project_id": "flutter-pro-firebase-37b9e",
+    "storage_bucket": "flutter-pro-firebase-37b9e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:533725282912:android:5d085ce293715b0f58b905",
+        "android_client_info": {
+          "package_name": "com.example.ble_smart_attendance_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCtpCgkqZaAfbBZ5KWUkX10dzcl43ys1dE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
