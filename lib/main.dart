@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'dart:async';
+import 'dart:math';
 void main() {
   runApp(const MyApp());
 }
@@ -58,50 +60,23 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void _incrementCounter() {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
       _counter++;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
+
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
+
         title: Text(widget.title),
       ),
       body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             const Text('You have pushed the button this many times:'),
@@ -120,3 +95,196 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 }
+/////////////////////////////////////////////////////////////////
+class BLEScannerScreen extends StatefulWidget {
+  const BLEScannerScreen({super.key});
+
+  @override
+  State<BLEScannerScreen> createState() => _BLEScannerScreenState();
+}
+
+class _BLEScannerScreenState extends State<BLEScannerScreen> {
+  List<BluetoothDevice> _devices = [];
+  bool _isScanning = false;
+  StreamSubscription<List<ScanResult>>? _scanSubscription;
+
+  // Distance calculation function
+  double _calculateDistance(int rssi, {int txPower = -59}) {
+    if (rssi == 0) return -1.0;
+    return pow(10, (txPower - rssi) / 20).toDouble();
+  }
+
+  @override
+  void dispose() {
+    _scanSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _startScan() async {
+    try {
+      setState(() => _isScanning = true);
+      _devices.clear();
+
+      if (!await FlutterBluePlus.isAvailable) {
+        throw 'Bluetooth not available';
+      }
+
+      _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
+        for (final result in results) {
+          if (!_devices.any((d) => d.id == result.device.id)) {
+            setState(() {
+              _devices.add(result.device);
+            });
+          }
+        }
+      });
+
+      await FlutterBluePlus.startScan(
+        timeout: const Duration(seconds: 10),
+        androidUsesFineLocation: false,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Scan failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isScanning = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('BLE Scanner')),
+      body: ListView.builder(
+        itemCount: _devices.length,
+        itemBuilder: (context, index) {
+          final device = _devices[index];
+          return ListTile(
+            title: Text(device.name ?? 'Unknown'),
+            subtitle: Text(device.id.toString()),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => BeaconDetailsScreen(
+                    device: device,
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _isScanning ? null : _startScan,
+        child: const Icon(Icons.search),
+      ),
+    );
+  }
+}
+
+class BeaconDetailsScreen extends StatefulWidget {
+  final BluetoothDevice device;
+  final int initialRssi;
+
+  const BeaconDetailsScreen({
+    super.key,
+    required this.device,
+    this.initialRssi = -59, // Make optional with default value
+  });
+
+  @override
+  State<BeaconDetailsScreen> createState() => _BeaconDetailsScreenState();
+}
+
+class _BeaconDetailsScreenState extends State<BeaconDetailsScreen> {
+  double? _distance;
+  bool _isConnected = false;
+  Timer? _rssiTimer;
+  int? _currentRssi;
+
+  // Distance calculation (same as scanner)
+  double _calculateDistance(int rssi, {int txPower = -59}) {
+    if (rssi == 0) return -1.0;
+    return pow(10, (txPower - rssi) / 20).toDouble();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _currentRssi = widget.initialRssi;
+    _distance = _calculateDistance(widget.initialRssi);
+    _connectAndMonitor();
+  }
+
+  Future<void> _connectAndMonitor() async {
+    try {
+      await widget.device.connect(autoConnect: false);
+      setState(() => _isConnected = true);
+
+      _rssiTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+        try {
+          final rssi = await widget.device.readRssi();
+          setState(() {
+            _currentRssi = rssi;
+            _distance = _calculateDistance(rssi);
+          });
+        } catch (e) {
+          debugPrint('RSSI update failed: $e');
+        }
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Connection failed: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _rssiTimer?.cancel();
+    widget.device.disconnect();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Device Details')),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              _isConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
+              size: 50,
+              color: _isConnected ? Colors.blue : Colors.grey,
+            ),
+            const SizedBox(height: 20),
+            Text('Device: ${widget.device.name ?? 'Unknown'}'),
+            Text('ID: ${widget.device.id}'),
+            const SizedBox(height: 20),
+            if (_currentRssi != null) Text('RSSI: $_currentRssi dBm'),
+            if (_distance != null) ...[
+              Text('Distance: ${_distance!.toStringAsFixed(2)} meters'),
+              Text(
+                _distance! <= 8.0 ? 'Attendance Recorded' : 'Too Far Away',
+                style: TextStyle(
+                  color: _distance! <= 8.0 ? Colors.green : Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
