@@ -14,9 +14,6 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
-    <!-- Optional: Disable location requirement for BLE scanning (Android 12+) -->
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
-
     <!-- ==================== APPLICATION CONFIG ==================== -->
     <application
         android:label="ble_smart_attendance_app"
