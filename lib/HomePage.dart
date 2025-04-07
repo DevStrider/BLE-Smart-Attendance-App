@@ -43,6 +43,13 @@ class _LoginPageState extends State<LoginPage> {
       appBar: AppBar(
         title: const Text('Login'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        leading: IconButton(
+          icon: const Icon(Icons.menu, color: Colors.white),
+          onPressed: () {
+            // TODO: Implement menu functionality
+            print('Menu button pressed');
+          },
+        ),
       ),
       body: Center(
         child: Padding(
@@ -180,7 +187,7 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
             const SizedBox(height: 30),
-            // Logout button
+            // gout button
             ElevatedButton(
               onPressed: () {
                 Navigator.pushAndRemoveUntil(
@@ -202,6 +209,3 @@ class _HomePageState extends State<HomePage> {
     );
   }
 }
-
-
-
