@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'BLE_Utility.dart'; // Make sure this import path is correct
 
 void main() {
   runApp(const MyApp());
@@ -14,9 +13,6 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       home: const HomeScreen(),
-      theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF0C130E),
-      ),
     );
   }
 }
@@ -104,7 +100,7 @@ class HomeScreen extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
                   child: const Text(
-                    'Sign in',
+                    ' in',
                     style: TextStyle(color: Colors.white, fontSize: 16),
                   ),
                 ),
@@ -124,16 +120,19 @@ class RegisterScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // Dark background to match the welcome screen
       backgroundColor: const Color(0xFF0C130E),
       appBar: AppBar(
         backgroundColor: const Color(0xFF0C130E),
         elevation: 0,
+        // Back arrow with grey color
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: Colors.grey.shade400),
           onPressed: () {
             Navigator.pop(context);
           },
         ),
+        // Title with grey color
         title: Text(
           'Attendance Assistance',
           style: TextStyle(color: Colors.grey.shade400),
@@ -146,6 +145,7 @@ class RegisterScreen extends StatelessWidget {
           child: Column(
             children: [
               const SizedBox(height: 80),
+              // Main content (Register, key, First Name, Last Name, email, and password)
               Column(
                 children: [
                   Text(
@@ -167,6 +167,7 @@ class RegisterScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 40),
+                  // First Name field
                   TextField(
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
@@ -185,6 +186,7 @@ class RegisterScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 20),
+                  // Last Name field
                   TextField(
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
@@ -203,6 +205,7 @@ class RegisterScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 20),
+                  // Email field
                   TextField(
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
@@ -221,6 +224,7 @@ class RegisterScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 20),
+                  // Password field
                   TextField(
                     style: const TextStyle(color: Colors.white),
                     obscureText: true,
@@ -242,16 +246,12 @@ class RegisterScreen extends StatelessWidget {
                 ],
               ),
               const Spacer(),
+              // Register button anchored at the bottom
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const HomePage(),
-                      ),
-                    );
+                    // Your register logic here
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF00D38C),
@@ -291,6 +291,7 @@ class LoginScreen extends StatelessWidget {
             Navigator.pop(context);
           },
         ),
+        // Title removed to not show "Attendance Assistance"
       ),
       body: SafeArea(
         child: Padding(
@@ -362,12 +363,7 @@ class LoginScreen extends StatelessWidget {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const HomePage(),
-                      ),
-                    );
+                    // Handle sign in logic here
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF00D38C),
@@ -387,265 +383,6 @@ class LoginScreen extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class HomePage extends StatefulWidget {
-  const HomePage({super.key});
-
-  @override
-  State<HomePage> createState() => _HomePageState();
-}
-
-class _HomePageState extends State<HomePage> {
-  String? selectedCourse;
-  final List<String> courses = [
-    'Mathematics',
-    'Science',
-    'English',
-    'History',
-    'Computer Science'
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0C130E),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0C130E),
-        title: Text(
-          'Home',
-          style: GoogleFonts.roboto(
-            textStyle: const TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-        iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.person),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const MyProfilePage(),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-              child: DropdownButtonFormField<String>(
-                dropdownColor: const Color(0xFF191E1D),
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: 'Select Course',
-                  labelStyle: const TextStyle(color: Colors.white54),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  prefixIcon: const Icon(Icons.school, color: Colors.white54),
-                ),
-                value: selectedCourse,
-                icon: const Icon(Icons.arrow_drop_down, color: Colors.white54),
-                items: courses.map((String course) {
-                  return DropdownMenuItem<String>(
-                    value: course,
-                    child: Text(course),
-                  );
-                }).toList(),
-                onChanged: (String? newValue) {
-                  setState(() {
-                    selectedCourse = newValue;
-                  });
-                },
-              ),
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: ElevatedButton(
-                    onPressed: selectedCourse == null
-                        ? null
-                        : () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const BLEScannerScreen(),
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00D38C),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 16),
-                    ),
-                    child: const Text(
-                      'Take Attendance',
-                      style: TextStyle(color: Colors.black),
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: ElevatedButton(
-                    onPressed: selectedCourse == null
-                        ? null
-                        : () {},
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00D38C),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 16),
-                    ),
-                    child: const Text(
-                      'Record Attendance',
-                      style: TextStyle(color: Colors.black),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class MyProfilePage extends StatefulWidget {
-  const MyProfilePage({super.key});
-
-  @override
-  State<MyProfilePage> createState() => _MyProfilePageState();
-}
-
-class _MyProfilePageState extends State<MyProfilePage> {
-  int _currentIndex = 1;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Profile'),
-        centerTitle: true,
-        backgroundColor: const Color(0xFF0C130E),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        child: Column(
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF0D1C12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-              child: Row(
-                children: [
-                  Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      color: Colors.black26,
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    alignment: Alignment.center,
-                    child: const Text('😎', style: TextStyle(fontSize: 30)),
-                  ),
-                  const SizedBox(width: 16),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text(
-                        'Abdulrahman Mansour',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'abdulrahman.mansour',
-                        style: TextStyle(fontSize: 14, color: Colors.grey),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 30),
-            _buildSettingsItem(
-              title: 'Update username',
-              onTap: () {},
-            ),
-            _buildSettingsItem(
-              title: 'Change password',
-              onTap: () {},
-            ),
-            _buildSettingsItem(
-              title: 'Delete my account',
-              onTap: () {},
-            ),
-            const SizedBox(height: 20),
-            ListTile(
-              onTap: () {},
-              contentPadding: EdgeInsets.zero,
-              title: Text(
-                'Logout',
-                style: TextStyle(
-                  color: Colors.redAccent.shade200,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              trailing: const Icon(Icons.logout, color: Colors.redAccent),
-            ),
-          ],
-        ),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        backgroundColor: const Color(0xFF0D1C12),
-        selectedItemColor: Colors.white,
-        unselectedItemColor: Colors.grey,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-          if (index == 0) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const HomePage(),
-              ),
-            );
-          }
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'My Profile'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSettingsItem({required String title, VoidCallback? onTap}) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      title: Text(title, style: const TextStyle(fontSize: 16)),
-      trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-      onTap: onTap,
     );
   }
 }
