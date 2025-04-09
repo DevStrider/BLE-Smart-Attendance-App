@@ -401,11 +401,13 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   String? selectedCourse;
   final List<String> courses = [
-    'Mathematics',
-    'Science',
-    'English',
-    'History',
-    'Computer Science'
+    'NETW 601',
+    'NETW 603',
+    'NETW 703',
+    'MNGT 601',
+    'NETW 707',
+    'NETW 603',
+    'NETW 604'
   ];
 
   @override
@@ -414,30 +416,8 @@ class _HomePageState extends State<HomePage> {
       backgroundColor: const Color(0xFF0C130E),
       appBar: AppBar(
         backgroundColor: const Color(0xFF0C130E),
-        title: Text(
-          'Home',
-          style: GoogleFonts.roboto(
-            textStyle: const TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
+
         iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.person),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const MyProfilePage(),
-                ),
-              );
-            },
-          ),
-        ],
       ),
       body: Center(
         child: Column(
@@ -520,6 +500,32 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
       ),
+      bottomNavigationBar: BottomNavigationBar(
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: 'Profile',
+          ),
+        ],
+        currentIndex: 0,
+        selectedItemColor: const Color(0xFF00D38C),
+        unselectedItemColor: Colors.grey,
+        backgroundColor: const Color(0xFF0C130E),
+        onTap: (index) {
+          if (index == 1) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const MyProfilePage(),
+              ),
+            );
+          }
+        },
+      ),
     );
   }
 }
@@ -532,8 +538,6 @@ class MyProfilePage extends StatefulWidget {
 }
 
 class _MyProfilePageState extends State<MyProfilePage> {
-  int _currentIndex = 1;
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -615,14 +619,21 @@ class _MyProfilePageState extends State<MyProfilePage> {
         ),
       ),
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        backgroundColor: const Color(0xFF0D1C12),
-        selectedItemColor: Colors.white,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: 'Profile',
+          ),
+        ],
+        currentIndex: 1,
+        selectedItemColor: const Color(0xFF00D38C),
         unselectedItemColor: Colors.grey,
+        backgroundColor: const Color(0xFF0C130E),
         onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
           if (index == 0) {
             Navigator.pushReplacement(
               context,
@@ -632,10 +643,6 @@ class _MyProfilePageState extends State<MyProfilePage> {
             );
           }
         },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'My Profile'),
-        ],
       ),
     );
   }
