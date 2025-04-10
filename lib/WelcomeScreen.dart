@@ -100,7 +100,7 @@ class HomeScreen extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
                   child: const Text(
-                    'Login',
+                    ' in',
                     style: TextStyle(color: Colors.white, fontSize: 16),
                   ),
                 ),
@@ -302,7 +302,7 @@ class LoginScreen extends StatelessWidget {
               Column(
                 children: [
                   Text(
-                    'Sign in',
+                    'Login',
                     style: GoogleFonts.roboto(
                       textStyle: const TextStyle(
                         color: Colors.white,

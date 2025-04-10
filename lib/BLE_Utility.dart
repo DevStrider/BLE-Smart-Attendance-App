@@ -1,9 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'dart:async';
 import 'dart:math';
 
+void main() {
+  runApp(const MyApp());
+}
 
+/// The root widget.
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: BLEScannerScreen(),
+    );
+  }
+}
+
+/// Screen that scans for BLE devices.
 class BLEScannerScreen extends StatefulWidget {
   const BLEScannerScreen({super.key});
 
@@ -12,23 +29,51 @@ class BLEScannerScreen extends StatefulWidget {
 }
 
 class _BLEScannerScreenState extends State<BLEScannerScreen> {
-  List<BluetoothDevice> _devices = [];
+  // We no longer need an entire list, as we are only looking for one device.
   bool _isScanning = false;
   StreamSubscription<List<ScanResult>>? _scanSubscription;
+  // Define the target MAC address.
+  final String targetMac = "BC:57:29:00:4B:3A";
 
   double _calculateDistance(int rssi, {int txPower = -59}) {
     if (rssi == 0) return -1.0;
     return pow(10, (txPower - rssi) / 20).toDouble();
   }
+
   @override
   void initState() {
     super.initState();
+    _checkPermissions();
+    // Start scan when Bluetooth adapter is on.
     FlutterBluePlus.adapterState.listen((state) {
       if (state == BluetoothAdapterState.on) {
         _startScan();
       }
     });
   }
+
+  /// Check and request necessary permissions.
+  Future<void> _checkPermissions() async {
+    // Request location permission (used on older Android versions)
+    if (await Permission.location.request().isGranted) {
+      debugPrint("Location permission granted");
+    } else {
+      debugPrint("Location permission denied");
+    }
+
+    // Android 12+ permissions.
+    if (await Permission.bluetoothScan.request().isGranted) {
+      debugPrint("Bluetooth scan permission granted");
+    } else {
+      debugPrint("Bluetooth scan permission denied");
+    }
+    if (await Permission.bluetoothConnect.request().isGranted) {
+      debugPrint("Bluetooth connect permission granted");
+    } else {
+      debugPrint("Bluetooth connect permission denied");
+    }
+  }
+
   @override
   void dispose() {
     _scanSubscription?.cancel();
@@ -38,18 +83,31 @@ class _BLEScannerScreenState extends State<BLEScannerScreen> {
   Future<void> _startScan() async {
     try {
       setState(() => _isScanning = true);
-      _devices.clear();
 
       if (!await FlutterBluePlus.isAvailable) {
         throw 'Bluetooth not available';
       }
 
       _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
+        debugPrint("Received ${results.length} scan results");
+
+        // Iterate over found devices and check for the target device by MAC.
         for (final result in results) {
-          if (!_devices.any((d) => d.id == result.device.id)) {
-            setState(() {
-              _devices.add(result.device);
-            });
+          final deviceId = result.device.id.toString().toUpperCase();
+          debugPrint("Discovered device: $deviceId - ${result.device.name}");
+
+          if (deviceId == targetMac) {
+            debugPrint("Target device found: $deviceId");
+            _stopScan(); // Stop scanning as soon as we find the target.
+
+            // Navigate directly to the BeaconDetailsScreen for this device.
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => BeaconDetailsScreen(device: result.device),
+              ),
+            );
+            break; // Stop iterating once the target device is found.
           }
         }
       });
@@ -69,8 +127,17 @@ class _BLEScannerScreenState extends State<BLEScannerScreen> {
     }
   }
 
+  void _stopScan() {
+    FlutterBluePlus.stopScan();
+    setState(() => _isScanning = false);
+    // Cancel the subscription to stop receiving scan results.
+    _scanSubscription?.cancel();
+  }
+
   @override
   Widget build(BuildContext context) {
+    // A simple placeholder UI; since the app auto-connects upon finding the target,
+    // this scaffold will only be visible if the target device is not found immediately.
     return Scaffold(
       appBar: AppBar(
         title: const Text('BLE Scanner'),
@@ -81,56 +148,29 @@ class _BLEScannerScreenState extends State<BLEScannerScreen> {
           )
         ],
       ),
-      body: _devices.isEmpty
-          ? Center(
+      body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.bluetooth, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
-              'No devices found',
+              _isScanning ? 'Scanning for target device...' : 'Target device not found',
               style: Theme.of(context).textTheme.titleLarge,
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Tap the search button to scan',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
+            if (!_isScanning)
+              const Padding(
+                padding: EdgeInsets.only(top: 8.0),
+                child: Text('Tap the search button to scan again'),
+              ),
           ],
         ),
-      )
-          : ListView.builder(
-        itemCount: _devices.length,
-        itemBuilder: (context, index) {
-          final device = _devices[index];
-          return ListTile(
-            leading: const Icon(Icons.bluetooth),
-            title: Text(device.name ?? 'Unknown Device'),
-            subtitle: Text(device.id.toString()),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => BeaconDetailsScreen(
-                    device: device,
-                  ),
-                ),
-              );
-            },
-          );
-        },
       ),
     );
   }
-
-  void _stopScan() {
-    FlutterBluePlus.stopScan();
-    setState(() => _isScanning = false);
-  }
 }
 
+/// Beacon details screen which connects to the device and shows its signal strength.
 class BeaconDetailsScreen extends StatefulWidget {
   final BluetoothDevice device;
   final int initialRssi;
@@ -200,54 +240,51 @@ class _BeaconDetailsScreenState extends State<BeaconDetailsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.device.name ?? 'Device Details'),
+        title: Text(widget.device.name.isNotEmpty ? widget.device.name : 'Device Details'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.bluetooth,
-                          color: _isConnected ? Colors.blue : Colors.grey,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          _isConnected ? 'Connected' : 'Disconnected',
-                          style: TextStyle(
-                            color: _isConnected ? Colors.blue : Colors.grey,
-                          ),
-                        ),
-                      ],
+                    Icon(
+                      Icons.bluetooth,
+                      color: _isConnected ? Colors.blue : Colors.grey,
                     ),
-                    const SizedBox(height: 16),
-                    _buildInfoRow('Device ID:', widget.device.id.toString()),
-                    if (_currentRssi != null)
-                      _buildInfoRow('Signal Strength:', '$_currentRssi dBm'),
-                    if (_distance != null) ...[
-                      _buildInfoRow('Distance:', '${_distance!.toStringAsFixed(2)} meters'),
-                      const SizedBox(height: 16),
-                      Text(
-                        _distance! <= 8.0 ? '✅ In Range' : '❌ Too Far',
-                        style: TextStyle(
-                          color: _distance! <= 8.0 ? Colors.green : Colors.red,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _isConnected ? 'Connected' : 'Disconnected',
+                      style: TextStyle(
+                        color: _isConnected ? Colors.blue : Colors.grey,
                       ),
-                    ],
+                    ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 16),
+                _buildInfoRow('Device ID:', widget.device.id.toString()),
+                if (_currentRssi != null)
+                  _buildInfoRow('Signal Strength:', '$_currentRssi dBm'),
+                if (_distance != null) ...[
+                  _buildInfoRow('Distance:', '${_distance!.toStringAsFixed(2)} meters'),
+                  // Added Subject row
+                  _buildInfoRow('Subject:', 'Network Protocol NETW 703'),
+                  const SizedBox(height: 16),
+                  Text(
+                    _distance! <= 8.0 ? '✅ In Range' : '❌ Too Far',
+                    style: TextStyle(
+                      color: _distance! <= 8.0 ? Colors.green : Colors.red,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                ],
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
