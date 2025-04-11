@@ -272,6 +272,9 @@ class _BeaconDetailsScreenState extends State<BeaconDetailsScreen> {
                   _buildInfoRow('Distance:', '${_distance!.toStringAsFixed(2)} meters'),
                   // Added Subject row
                   _buildInfoRow('Subject:', 'Network Protocol NETW 703'),
+                  _buildInfoRow('Attendence:', 'Recorded'),
+                  _buildInfoRow('Time:', ''),
+                  _buildInfoRow('Date:', ''),
                   const SizedBox(height: 16),
                   Text(
                     _distance! <= 8.0 ? '✅ In Range' : '❌ Too Far',
