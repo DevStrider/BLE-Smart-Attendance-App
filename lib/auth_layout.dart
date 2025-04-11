@@ -1,7 +1,6 @@
 import 'package:ble_smart_attendance_app/HomePage.dart';
 import 'package:ble_smart_attendance_app/auth_service.dart';
 import 'package:flutter/material.dart';
-
 import 'WelcomePage.dart';
 import 'app_loading_page.dart';
 

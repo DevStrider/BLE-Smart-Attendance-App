@@ -17,7 +17,7 @@
 
     <!-- ==================== APPLICATION CONFIG ==================== -->
     <application
-        android:label="Attendence Assistance"
+        android:label="Attendance Assistance"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 
