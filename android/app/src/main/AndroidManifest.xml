@@ -17,7 +17,7 @@
 
     <!-- ==================== APPLICATION CONFIG ==================== -->
     <application
-        android:label="ble_smart_attendance_app"
+        android:label="Attendence Assistance"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 
