@@ -140,7 +140,7 @@ class _BLEScannerScreenState extends State<BLEScannerScreen> {
     // this scaffold will only be visible if the target device is not found immediately.
     return Scaffold(
       appBar: AppBar(
-        title: const Text('BLE Scanner'),
+        title: const Text('Take Attendance'),
         actions: [
           IconButton(
             icon: Icon(_isScanning ? Icons.stop : Icons.search),
