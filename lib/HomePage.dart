@@ -43,7 +43,6 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    // Get the current user’s display name; default to 'Student' if not available.
     final String welcomeName = FirebaseAuth.instance.currentUser?.displayName ?? 'Student';
 
     return Scaffold(
@@ -53,55 +52,75 @@ class _HomePageState extends State<HomePage> {
         automaticallyImplyLeading: false,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Updated header text using the user's first name.
-          Text(
-            'Welcome $welcomeName',
-            style: GoogleFonts.roboto(
-              textStyle: const TextStyle(
-                color: Colors.white,
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          const SizedBox(height: 40),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-            child: DropdownButtonFormField<String>(
-              dropdownColor: const Color(0xFF191E1D),
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: 'Select Course',
-                labelStyle: const TextStyle(color: Colors.white54),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+      body: SingleChildScrollView(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Welcome text
+            Padding(
+              padding: const EdgeInsets.only(top: 40),
+              child: Text(
+                'Welcome $welcomeName',
+                style: GoogleFonts.roboto(
+                  textStyle: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-                prefixIcon: const Icon(Icons.school, color: Colors.white54),
               ),
-              value: selectedCourse,
-              icon: const Icon(Icons.arrow_drop_down, color: Colors.white54),
-              items: courses.map((String course) {
-                return DropdownMenuItem<String>(
-                  value: course,
-                  child: Text(course),
-                );
-              }).toList(),
-              onChanged: (String? newValue) {
-                setState(() {
-                  selectedCourse = newValue;
-                });
-              },
             ),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: ElevatedButton(
+            const SizedBox(height: 40),
+
+            // Dropdown button with constrained width
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: SizedBox(
+                width: MediaQuery.of(context).size.width * 0.9,
+                child: DropdownButtonFormField<String>(
+                  isExpanded: true, // Important to prevent overflow
+                  dropdownColor: const Color(0xFF191E1D),
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  decoration: InputDecoration(
+                    labelText: 'Select Course',
+                    labelStyle: const TextStyle(color: Colors.white54),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    prefixIcon: const Icon(Icons.school, color: Colors.white54),
+                  ),
+                  value: selectedCourse,
+                  icon: const Icon(Icons.arrow_drop_down, color: Colors.white54),
+                  items: courses.map((String course) {
+                    return DropdownMenuItem<String>(
+                      value: course,
+                      child: Text(
+                        course,
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (String? newValue) {
+                    setState(() {
+                      selectedCourse = newValue;
+                    });
+                  },
+                  menuMaxHeight: 300, // Limit dropdown height
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 30),
+
+            // Buttons row
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                ElevatedButton(
                   onPressed: selectedCourse == null
                       ? null
                       : () {
@@ -121,10 +140,7 @@ class _HomePageState extends State<HomePage> {
                     style: TextStyle(color: Colors.black),
                   ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: ElevatedButton(
+                ElevatedButton(
                   onPressed: selectedCourse == null
                       ? null
                       : () {},
@@ -137,10 +153,11 @@ class _HomePageState extends State<HomePage> {
                     style: TextStyle(color: Colors.black),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+            const SizedBox(height: 40),
+          ],
+        ),
       ),
       bottomNavigationBar: BottomNavigationBar(
         items: const [

@@ -17,6 +17,9 @@ class _DeleteAccountPageState extends State<DeleteAccountPage> {
   TextEditingController emailController = TextEditingController();
   TextEditingController passwordController = TextEditingController();
   String errorMessage = '';
+  final FocusNode _emailFocus = FocusNode();
+  final FocusNode _passwordFocus = FocusNode();
+  bool isLoading = false;
 
   Future<bool?> _showConfirmationDialog() {
     return showDialog<bool>(
@@ -59,20 +62,30 @@ class _DeleteAccountPageState extends State<DeleteAccountPage> {
     bool? confirmed = await _showConfirmationDialog();
     if (confirmed != true) return;
 
+    setState(() {
+      isLoading = true;
+      errorMessage = '';
+    });
+
     try {
       await authService.value.deleteAccount(
         email: emailController.text,
         password: passwordController.text,
       );
-      // Navigate to WelcomePage after account is deleted.
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => WelcomePage()),
+        MaterialPageRoute(builder: (context) => const WelcomePage()),
             (Route<dynamic> route) => false,
       );
     } on FirebaseAuthException catch (e) {
       setState(() {
         errorMessage = e.message ?? "An error occurred. Please try again.";
       });
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
   }
 
@@ -80,6 +93,8 @@ class _DeleteAccountPageState extends State<DeleteAccountPage> {
   void dispose() {
     emailController.dispose();
     passwordController.dispose();
+    _emailFocus.dispose();
+    _passwordFocus.dispose();
     super.dispose();
   }
 
@@ -92,115 +107,158 @@ class _DeleteAccountPageState extends State<DeleteAccountPage> {
         elevation: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: Colors.grey.shade400),
-          onPressed: () {
-            Navigator.pop(context);
-          },
+          onPressed: () => Navigator.pop(context),
         ),
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0),
-          child: Form(
-            key: formKey,
-            child: Column(
-              children: [
-                const SizedBox(height: 80),
-                // Header text
-                const Text(
-                  'Delete Account',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                  ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                left: 20,
+                right: 20,
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight,
                 ),
-                const SizedBox(height: 20),
-                // Warning icon to signify a destructive action
-                Text(
-                  '❌',
-                  style: TextStyle(
-                    fontSize: 50,
-                    color: Colors.red.shade600,
-                  ),
-                ),
-                const SizedBox(height: 40),
-                // Email TextField
-                TextFormField(
-                  controller: emailController,
-                  style: const TextStyle(color: Colors.white),
-                  keyboardType: TextInputType.emailAddress,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your email';
-                    }
-                    return null;
-                  },
-                  decoration: InputDecoration(
-                    hintText: 'Email',
-                    hintStyle: const TextStyle(color: Colors.white54),
-                    filled: true,
-                    fillColor: const Color(0xFF191E1D),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(30),
-                      borderSide: BorderSide.none,
+                child: IntrinsicHeight(
+                  child: Form(
+                    key: formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(height: 40),
+                        const Text(
+                          'Delete Account',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          '❌',
+                          style: TextStyle(
+                            fontSize: 50,
+                            color: Colors.red.shade600,
+                          ),
+                        ),
+                        const SizedBox(height: 40),
+                        // Email TextField
+                        TextFormField(
+                          controller: emailController,
+                          focusNode: _emailFocus,
+                          style: const TextStyle(color: Colors.white),
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                          onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_passwordFocus),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter your email';
+                            }
+                            return null;
+                          },
+                          decoration: InputDecoration(
+                            hintText: 'Email',
+                            hintStyle: const TextStyle(color: Colors.white54),
+                            filled: true,
+                            fillColor: const Color(0xFF191E1D),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 16,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(30),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        // Password TextField
+                        TextFormField(
+                          controller: passwordController,
+                          focusNode: _passwordFocus,
+                          style: const TextStyle(color: Colors.white),
+                          obscureText: true,
+                          textInputAction: TextInputAction.done,
+                          onFieldSubmitted: (_) => deleteAccount(),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter your password';
+                            }
+                            return null;
+                          },
+                          decoration: InputDecoration(
+                            hintText: 'Password',
+                            hintStyle: const TextStyle(color: Colors.white54),
+                            filled: true,
+                            fillColor: const Color(0xFF191E1D),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 16,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(30),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        // Error message
+                        if (errorMessage.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            child: Text(
+                              errorMessage,
+                              style: const TextStyle(
+                                color: Colors.red,
+                                fontSize: 14,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        const Spacer(),
+                        // Delete Account Button
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: isLoading ? null : deleteAccount,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF00D38C),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                            ),
+                            child: isLoading
+                                ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.black),
+                              ),
+                            )
+                                : const Text(
+                              'Delete Account',
+                              style: TextStyle(
+                                color: Colors.black,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
-                // Password TextField for re-authentication
-                TextFormField(
-                  controller: passwordController,
-                  style: const TextStyle(color: Colors.white),
-                  obscureText: true,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your password';
-                    }
-                    return null;
-                  },
-                  decoration: InputDecoration(
-                    hintText: 'Password',
-                    hintStyle: const TextStyle(color: Colors.white54),
-                    filled: true,
-                    fillColor: const Color(0xFF191E1D),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(30),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                // Display error message if exists
-                if (errorMessage.isNotEmpty)
-                  Text(
-                    errorMessage,
-                    style: const TextStyle(color: Colors.red),
-                  ),
-                const Spacer(),
-                // Delete Account Button
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: deleteAccount,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00D38C),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    child: const Text(
-                      'Delete Account',
-                      style: TextStyle(color: Colors.black, fontSize: 16),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         ),
       ),
     );
