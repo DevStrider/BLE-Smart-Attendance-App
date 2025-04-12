@@ -6,7 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 class ResetPasswordPage extends StatefulWidget {
   final String? email;
 
-  const ResetPasswordPage({Key? key, this.email}) : super(key: key);
+  const ResetPasswordPage({super.key, this.email});
 
   @override
   _ResetPasswordPageState createState() => _ResetPasswordPageState();

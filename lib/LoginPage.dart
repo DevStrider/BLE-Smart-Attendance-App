@@ -5,7 +5,7 @@ import 'HomePage.dart';
 import 'auth_service.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({Key? key}) : super(key: key);
+  const LoginPage({super.key});
 
   @override
   _LoginScreenState createState() => _LoginScreenState();

@@ -6,7 +6,7 @@ import 'auth_service.dart';
 class UpdateUsernamePage extends StatefulWidget {
   final String? email;
 
-  const UpdateUsernamePage({Key? key, this.email}) : super(key: key);
+  const UpdateUsernamePage({super.key, this.email});
 
   @override
   _UpdateUsernamePage createState() => _UpdateUsernamePage();

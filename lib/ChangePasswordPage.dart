@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class ChangePasswordPage extends StatefulWidget {
-  const ChangePasswordPage({Key? key, this.email}) : super(key: key);
+  const ChangePasswordPage({super.key, this.email});
   final String? email;
 
   @override

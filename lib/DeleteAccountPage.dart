@@ -6,7 +6,7 @@ import 'WelcomePage.dart';
 class DeleteAccountPage extends StatefulWidget {
   final String? email;
 
-  const DeleteAccountPage({Key? key, this.email}) : super(key: key);
+  const DeleteAccountPage({super.key, this.email});
 
   @override
   _DeleteAccountPageState createState() => _DeleteAccountPageState();
