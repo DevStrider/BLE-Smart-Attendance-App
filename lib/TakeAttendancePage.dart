@@ -3,7 +3,18 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:async';
 import 'dart:math';
-import 'package:intl/intl.dart'; // Import intl for date and time formatting
+import 'package:intl/intl.dart';
+
+// Define a color scheme for the app.
+class AppColors {
+  static const background = Color(0xFF0C130E);
+  static const appBarColor = Color(0xFF1C1C1C);
+  static const cardBackground = Color(0xFF1E1E1E); // Dark card for details.
+  static const iconColor = Colors.white70;
+  static const textColor = Colors.white;
+  static const accentConnected = Colors.greenAccent;
+  static const accentDisconnected = Colors.redAccent;
+}
 
 /// Screen that scans for BLE devices.
 class TakeAttendancePage extends StatefulWidget {
@@ -14,7 +25,7 @@ class TakeAttendancePage extends StatefulWidget {
 }
 
 class _TakeAttendancePageState extends State<TakeAttendancePage> {
-  // We no longer need an entire list, as we are only looking for one device.
+  // Since we only look for one device, a full list is not necessary.
   bool _isScanning = false;
   StreamSubscription<List<ScanResult>>? _scanSubscription;
   // Define the target MAC address.
@@ -29,7 +40,7 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
   void initState() {
     super.initState();
     _checkPermissions();
-    // Start scan when Bluetooth adapter is on.
+    // Start scanning when the Bluetooth adapter is on.
     FlutterBluePlus.adapterState.listen((state) {
       if (state == BluetoothAdapterState.on) {
         _startScan();
@@ -37,9 +48,9 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
     });
   }
 
-  /// Check and request necessary permissions.
+  /// Check and request the necessary permissions.
   Future<void> _checkPermissions() async {
-    // Request location permission (used on older Android versions)
+    // Request location permission (used on older Android versions).
     if (await Permission.location.request().isGranted) {
       debugPrint("Location permission granted");
     } else {
@@ -76,23 +87,23 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
       _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
         debugPrint("Received ${results.length} scan results");
 
-        // Iterate over found devices and check for the target device by MAC.
+        // Check each device to see if it matches the target MAC address.
         for (final result in results) {
           final deviceId = result.device.id.toString().toUpperCase();
           debugPrint("Discovered device: $deviceId - ${result.device.name}");
 
           if (deviceId == targetMac) {
             debugPrint("Target device found: $deviceId");
-            _stopScan(); // Stop scanning as soon as we find the target.
+            _stopScan(); // Stop scanning once the target is found.
 
-            // Navigate directly to the BeaconDetailsScreen for this device.
+            // Navigate to the BeaconDetailsScreen for the target device.
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(
                 builder: (context) => BeaconDetailsScreen(device: result.device),
               ),
             );
-            break; // Stop iterating once the target device is found.
+            break; // Exit loop once target is found.
           }
         }
       });
@@ -115,20 +126,19 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
   void _stopScan() {
     FlutterBluePlus.stopScan();
     setState(() => _isScanning = false);
-    // Cancel the subscription to stop receiving scan results.
     _scanSubscription?.cancel();
   }
 
   @override
   Widget build(BuildContext context) {
-    // A simple placeholder UI; since the app auto-connects upon finding the target,
-    // this scaffold will only be visible if the target device is not found immediately.
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
+        backgroundColor: AppColors.appBarColor,
         title: const Text('Take Attendance'),
         actions: [
           IconButton(
-            icon: Icon(_isScanning ? Icons.stop : Icons.search),
+            icon: Icon(_isScanning ? Icons.stop : Icons.search, color: AppColors.iconColor),
             onPressed: _isScanning ? _stopScan : _startScan,
           )
         ],
@@ -137,16 +147,19 @@ class _TakeAttendancePageState extends State<TakeAttendancePage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.bluetooth, size: 64, color: Colors.grey[400]),
+            Icon(Icons.bluetooth, size: 64, color: AppColors.iconColor),
             const SizedBox(height: 16),
             Text(
               _isScanning ? 'Scanning for target device...' : 'Target device not found',
-              style: Theme.of(context).textTheme.titleLarge,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(color: AppColors.textColor),
             ),
             if (!_isScanning)
               const Padding(
                 padding: EdgeInsets.only(top: 8.0),
-                child: Text('Tap the search button to scan again'),
+                child: Text(
+                  'Tap the search button to scan again',
+                  style: TextStyle(color: AppColors.textColor),
+                ),
               ),
           ],
         ),
@@ -223,32 +236,41 @@ class _BeaconDetailsScreenState extends State<BeaconDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Get the current date and time formatted using intl.
+    // Format the current date and time using intl.
     final String currentTime = DateFormat('hh:mm:ss a').format(DateTime.now());
     final String currentDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
+        backgroundColor: AppColors.appBarColor,
         title: Text(widget.device.name.isNotEmpty ? widget.device.name : 'Device Details'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Card(
+          color: AppColors.cardBackground,
           child: Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               children: [
+                // Connection status row.
                 Row(
                   children: [
                     Icon(
                       Icons.bluetooth,
-                      color: _isConnected ? Colors.blue : Colors.grey,
+                      color: _isConnected
+                          ? AppColors.accentConnected
+                          : AppColors.accentDisconnected,
                     ),
                     const SizedBox(width: 8),
                     Text(
                       _isConnected ? 'Connected' : 'Disconnected',
                       style: TextStyle(
-                        color: _isConnected ? Colors.blue : Colors.grey,
+                        color: _isConnected
+                            ? AppColors.accentConnected
+                            : AppColors.accentDisconnected,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ],
@@ -260,12 +282,11 @@ class _BeaconDetailsScreenState extends State<BeaconDetailsScreen> {
                 if (_distance != null) ...[
                   _buildInfoRow('Distance:', '${_distance!.toStringAsFixed(2)} meters'),
                   _buildInfoRow('Subject:', 'Network Protocol NETW 703'),
-                  _buildInfoRow('Attendence:', 'Recorded'),
                   _buildInfoRow('Time:', currentTime),
                   _buildInfoRow('Date:', currentDate),
                   const SizedBox(height: 16),
                   Text(
-                    _distance! <= 8.0 ? '✅ In Range' : '❌ Too Far',
+                    _distance! <= 8.0 ? '✅ Attendance Recorded' : '❌ Too Far',
                     style: TextStyle(
                       color: _distance! <= 8.0 ? Colors.green : Colors.red,
                       fontWeight: FontWeight.bold,
@@ -281,6 +302,7 @@ class _BeaconDetailsScreenState extends State<BeaconDetailsScreen> {
     );
   }
 
+  // Helper method to build info rows with consistent styling.
   Widget _buildInfoRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -288,10 +310,15 @@ class _BeaconDetailsScreenState extends State<BeaconDetailsScreen> {
         children: [
           Text(
             label,
-            style: const TextStyle(fontWeight: FontWeight.bold),
+            style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textColor),
           ),
           const SizedBox(width: 8),
-          Text(value),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(color: AppColors.textColor),
+            ),
+          ),
         ],
       ),
     );

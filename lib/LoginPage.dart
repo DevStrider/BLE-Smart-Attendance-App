@@ -1,3 +1,4 @@
+import 'ResetPasswordPage.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -175,7 +176,12 @@ class _LoginScreenState extends State<LoginPage> {
                         alignment: Alignment.centerRight,
                         child: TextButton(
                           onPressed: () {
-                            // Add navigation to reset password page
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const ResetPasswordPage(),
+                              ),
+                            );
                           },
                           style: TextButton.styleFrom(
                             foregroundColor: const Color(0xFF00D38C),

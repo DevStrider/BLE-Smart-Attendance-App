@@ -43,7 +43,6 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    // Get the current user’s display name; default to 'Student' if not available.
     final String welcomeName = FirebaseAuth.instance.currentUser?.displayName ?? 'Student';
 
     return Scaffold(
@@ -53,94 +52,115 @@ class _HomePageState extends State<HomePage> {
         automaticallyImplyLeading: false,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Updated header text using the user's first name.
-          Text(
-            'Welcome $welcomeName',
-            style: GoogleFonts.roboto(
-              textStyle: const TextStyle(
-                color: Colors.white,
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+      body: SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: MediaQuery.of(context).size.height,
           ),
-          const SizedBox(height: 40),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-            child: DropdownButtonFormField<String>(
-              dropdownColor: const Color(0xFF191E1D),
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: 'Select Course',
-                labelStyle: const TextStyle(color: Colors.white54),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                prefixIcon: const Icon(Icons.school, color: Colors.white54),
-              ),
-              value: selectedCourse,
-              icon: const Icon(Icons.arrow_drop_down, color: Colors.white54),
-              items: courses.map((String course) {
-                return DropdownMenuItem<String>(
-                  value: course,
-                  child: Text(course),
-                );
-              }).toList(),
-              onChanged: (String? newValue) {
-                setState(() {
-                  selectedCourse = newValue;
-                });
-              },
-            ),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: ElevatedButton(
-                  onPressed: selectedCourse == null
-                      ? null
-                      : () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const TakeAttendancePage(),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Welcome text
+                  Text(
+                    'Welcome $welcomeName',
+                    style: GoogleFonts.roboto(
+                      textStyle: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
                       ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00D38C),
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    ),
                   ),
-                  child: const Text(
-                    'Take Attendance',
-                    style: TextStyle(color: Colors.black),
+                  const SizedBox(height: 40),
+
+                  // Dropdown button
+                  SizedBox(
+                    width: MediaQuery.of(context).size.width * 0.9,
+                    child: DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      dropdownColor: const Color(0xFF191E1D),
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      decoration: InputDecoration(
+                        labelText: 'Select Course',
+                        labelStyle: const TextStyle(color: Colors.white54),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        prefixIcon: const Icon(Icons.school, color: Colors.white54),
+                      ),
+                      value: selectedCourse,
+                      icon: const Icon(Icons.arrow_drop_down, color: Colors.white54),
+                      items: courses.map((String course) {
+                        return DropdownMenuItem<String>(
+                          value: course,
+                          child: Text(
+                            course,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (String? newValue) {
+                        setState(() {
+                          selectedCourse = newValue;
+                        });
+                      },
+                      menuMaxHeight: 300,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 30),
+
+                  // Row with buttons placed side by side using Expanded widgets
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: selectedCourse == null
+                              ? null
+                              : () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const TakeAttendancePage(),
+                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF00D38C),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                          ),
+                          child: const Text(
+                            'Take Attendance',
+                            style: TextStyle(color: Colors.black),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: selectedCourse == null ? null : () {},
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF00D38C),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                          ),
+                          child: const Text(
+                            'Record Attendance',
+                            style: TextStyle(color: Colors.black),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 40),
+                ],
               ),
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: ElevatedButton(
-                  onPressed: selectedCourse == null
-                      ? null
-                      : () {},
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00D38C),
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                  ),
-                  child: const Text(
-                    'Record Attendance',
-                    style: TextStyle(color: Colors.black),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
-        ],
+        ),
       ),
       bottomNavigationBar: BottomNavigationBar(
         items: const [
@@ -156,7 +176,7 @@ class _HomePageState extends State<HomePage> {
         currentIndex: 0,
         selectedItemColor: const Color(0xFF00D38C),
         unselectedItemColor: Colors.grey,
-        backgroundColor: Colors.blueGrey,
+        backgroundColor: const Color(0xFF1E1E1E),
         onTap: (index) {
           if (index == 1) {
             Navigator.push(

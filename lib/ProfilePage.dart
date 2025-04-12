@@ -224,7 +224,7 @@ class _ProfilePageState extends State<ProfilePage> {
         currentIndex: 1,
         selectedItemColor: const Color(0xFF00D38C),
         unselectedItemColor: Colors.grey,
-        backgroundColor: Colors.blueGrey,
+        backgroundColor: const Color(0xFF1E1E1E),
         onTap: (index) {
           if (index == 0) {
             Navigator.pushReplacement(
