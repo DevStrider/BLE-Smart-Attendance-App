@@ -3,32 +3,17 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:async';
 import 'dart:math';
-
-void main() {
-  runApp(const MyApp());
-}
-
-/// The root widget.
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: BLEScannerScreen(),
-    );
-  }
-}
+import 'package:intl/intl.dart'; // Import intl for date and time formatting
 
 /// Screen that scans for BLE devices.
-class BLEScannerScreen extends StatefulWidget {
-  const BLEScannerScreen({super.key});
+class TakeAttendancePage extends StatefulWidget {
+  const TakeAttendancePage({super.key});
 
   @override
-  State<BLEScannerScreen> createState() => _BLEScannerScreenState();
+  State<TakeAttendancePage> createState() => _TakeAttendancePageState();
 }
 
-class _BLEScannerScreenState extends State<BLEScannerScreen> {
+class _TakeAttendancePageState extends State<TakeAttendancePage> {
   // We no longer need an entire list, as we are only looking for one device.
   bool _isScanning = false;
   StreamSubscription<List<ScanResult>>? _scanSubscription;
@@ -238,6 +223,10 @@ class _BeaconDetailsScreenState extends State<BeaconDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Get the current date and time formatted using intl.
+    final String currentTime = DateFormat('hh:mm:ss a').format(DateTime.now());
+    final String currentDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.device.name.isNotEmpty ? widget.device.name : 'Device Details'),
@@ -270,11 +259,10 @@ class _BeaconDetailsScreenState extends State<BeaconDetailsScreen> {
                   _buildInfoRow('Signal Strength:', '$_currentRssi dBm'),
                 if (_distance != null) ...[
                   _buildInfoRow('Distance:', '${_distance!.toStringAsFixed(2)} meters'),
-                  // Added Subject row
                   _buildInfoRow('Subject:', 'Network Protocol NETW 703'),
                   _buildInfoRow('Attendence:', 'Recorded'),
-                  _buildInfoRow('Time:', ''),
-                  _buildInfoRow('Date:', ''),
+                  _buildInfoRow('Time:', currentTime),
+                  _buildInfoRow('Date:', currentDate),
                   const SizedBox(height: 16),
                   Text(
                     _distance! <= 8.0 ? '✅ In Range' : '❌ Too Far',

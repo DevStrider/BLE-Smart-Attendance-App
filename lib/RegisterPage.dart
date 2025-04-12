@@ -1,8 +1,9 @@
-import 'package:ble_smart_attendance_app/auth_service.dart';
+import 'auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'HomePage.dart';
+import 'auth_service.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({Key? key}) : super(key: key);
