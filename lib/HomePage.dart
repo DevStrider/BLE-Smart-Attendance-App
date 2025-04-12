@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'ProfilePage.dart';
+import 'RecordAttendancePage.dart';
 import 'TakeAttendancePage.dart';
+
 import 'package:firebase_auth/firebase_auth.dart';
 
 void main() {
@@ -142,7 +144,18 @@ class _HomePageState extends State<HomePage> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: selectedCourse == null ? null : () {},
+                          onPressed: selectedCourse == null
+                              ? null
+                              : () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => RecordAttendancePage(
+                                  selectedCourse: selectedCourse!,
+                                ),
+                              ),
+                            );
+                          },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF00D38C),
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
