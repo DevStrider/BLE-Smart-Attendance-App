@@ -1,98 +1,193 @@
 import 'package:flutter/material.dart';
-import 'HomePage.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 
-class RecordAttendancePage extends StatelessWidget {
+class RecordAttendancePage extends StatefulWidget {
   final String selectedCourse;
   const RecordAttendancePage({Key? key, required this.selectedCourse}) : super(key: key);
 
   @override
+  _RecordAttendancePageState createState() => _RecordAttendancePageState();
+}
+
+class _RecordAttendancePageState extends State<RecordAttendancePage>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animController;
+  late Animation<double> _progressAnim;
+
+  final int attendanceCount = 8;
+  final int absenceCount = 2;
+  late final int totalSessions;
+  late final double attendanceRate;
+
+  @override
+  void initState() {
+    super.initState();
+    totalSessions = attendanceCount + absenceCount;
+    attendanceRate = totalSessions > 0 ? attendanceCount / totalSessions : 0;
+
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..forward();
+
+    _progressAnim = Tween<double>(
+      begin: 0.0,
+      end: attendanceRate,
+    ).animate(CurvedAnimation(
+      parent: _animController,
+      curve: const Interval(0.5, 0.8, curve: Curves.easeOut),
+    ));
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0C130E),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0C130E),
-        // Title removed for minimalism.
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const HomePage()),
-            );
-          },
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF004D43), Color(0xFF046307)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
         ),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Recorded Attendance',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 20),
-            // Card for attendance details with extra vertical space
-            Card(
-              color: const Color(0xFF1E1E1E),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  // Increased vertical spacing for a taller appearance.
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        child: SafeArea(
+          child: Column(
+            children: [
+              // ← HEADER IS NOW STATIC (no SlideTransition)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+                child: Row(
                   children: [
-                    _buildAttendanceRow('Course Name', selectedCourse),
-                    const Divider(color: Colors.white24),
-                    _buildAttendanceRow('Number of Attendance', '0'),
-                    const Divider(color: Colors.white24),
-                    _buildAttendanceRow('Number of Absence', '0'),
-                    const Divider(color: Colors.white24),
-                    _buildAttendanceRow('Date', '03/02/2025'),
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Attendance Overview',
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 26,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            widget.selectedCourse,
+                            style: GoogleFonts.openSans(
+                              color: Colors.white70,
+                              fontSize: 14,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
-            ),
-          ],
+
+              // Chart (no slide, only progress sweep)
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 16.0),
+                height: 180,
+                child: Center(
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox(
+                        width: 180,
+                        height: 180,
+                        child: AnimatedBuilder(
+                          animation: _progressAnim,
+                          builder: (context, child) => CircularProgressIndicator(
+                            value: _progressAnim.value,
+                            backgroundColor: Colors.white12,
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                              Color(0xFF00D38C),
+                            ),
+                            strokeWidth: 12,
+                          ),
+                        ),
+                      ),
+                      AnimatedBuilder(
+                        animation: _progressAnim,
+                        builder: (context, child) => Text(
+                          '${(_progressAnim.value * 100).toInt()}%',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 32,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Info rows (static)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                child: Column(
+                  children: [
+                    _buildInfoRow(Icons.book, 'Total Sessions', '$totalSessions'),
+                    const Divider(color: Colors.white24),
+                    _buildInfoRow(Icons.check_circle, 'Present', '$attendanceCount'),
+                    const Divider(color: Colors.white24),
+                    _buildInfoRow(Icons.cancel, 'Absent', '$absenceCount'),
+                    const Divider(color: Colors.white24),
+                    _buildInfoRow(
+                      Icons.date_range,
+                      'Date',
+                      DateFormat('dd/MM/yyyy').format(DateTime.now()),
+                    ),
+                  ],
+                ),
+              ),
+
+              const Spacer(),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // Helper method to build a row that displays a label and its value.
-  // The label is given a fixed width, and the value is allowed to wrap into multiple lines.
-  Widget _buildAttendanceRow(String label, String value) {
+  Widget _buildInfoRow(IconData icon, String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 150,
+          Icon(icon, color: Colors.white70, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
             child: Text(
               label,
-              style: const TextStyle(
+              style: GoogleFonts.openSans(
                 color: Colors.white,
-                fontWeight: FontWeight.bold,
                 fontSize: 16,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-              ),
-              softWrap: true,
+          Text(
+            value,
+            style: GoogleFonts.openSans(
+              color: Colors.white70,
+              fontSize: 16,
             ),
           ),
         ],

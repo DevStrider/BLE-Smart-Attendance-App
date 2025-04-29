@@ -5,57 +5,83 @@ import 'auth_service.dart';
 
 class UpdateUsernamePage extends StatefulWidget {
   final String? email;
-
-  const UpdateUsernamePage({super.key, this.email});
+  const UpdateUsernamePage({Key? key, this.email}) : super(key: key);
 
   @override
-  _UpdateUsernamePage createState() => _UpdateUsernamePage();
+  _UpdateUsernamePageState createState() => _UpdateUsernamePageState();
 }
 
-class _UpdateUsernamePage extends State<UpdateUsernamePage> {
-  final TextEditingController usernameController = TextEditingController();
-  final formKey = GlobalKey<FormState>();
-  String errorMessage = '';
+class _UpdateUsernamePageState extends State<UpdateUsernamePage>
+    with SingleTickerProviderStateMixin {
+  final TextEditingController _usernameController = TextEditingController();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+
+  late final AnimationController _animController;
+  late final Animation<double> _headerFade;
+  late final Animation<double> _iconScale;
+  late final Animation<double> _fieldFade;
+  late final Animation<double> _buttonFade;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+
+    _headerFade = CurvedAnimation(
+      parent: _animController,
+      curve: const Interval(0.0, 0.3, curve: Curves.easeIn),
+    );
+
+    _iconScale = CurvedAnimation(
+      parent: _animController,
+      curve: const Interval(0.3, 0.5, curve: Curves.elasticOut),
+    );
+
+    _fieldFade = CurvedAnimation(
+      parent: _animController,
+      curve: const Interval(0.5, 0.7, curve: Curves.easeIn),
+    );
+
+    _buttonFade = CurvedAnimation(
+      parent: _animController,
+      curve: const Interval(0.7, 1.0, curve: Curves.easeInOut),
+    );
+
+    _animController.forward();
+  }
 
   @override
   void dispose() {
-    usernameController.dispose();
+    _animController.dispose();
+    _usernameController.dispose();
     super.dispose();
   }
 
-  void updateUsername() async {
+  Future<void> _updateUsername() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
     try {
-      await authService.value.updateUsername(username: usernameController.text);
-      showSnackBarSuccess();
+      await authService.value.updateUsername(username: _usernameController.text);
+      _showSnackbar('Username updated successfully', success: true);
     } on FirebaseAuthException catch (e) {
-      showSnackBarFailure(e.message ?? "Username update failed");
+      _showSnackbar(e.message ?? 'Username update failed', success: false);
     }
   }
 
-  void showSnackBarSuccess() {
+  void _showSnackbar(String message, {required bool success}) {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        behavior: SnackBarBehavior.floating,
-        content: Text(
-          "Username updated successfully",
-          style: GoogleFonts.roboto(textStyle: const TextStyle(fontSize: 16)),
-        ),
-      ),
-    );
-  }
-
-  void showSnackBarFailure(String message) {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: Theme.of(context).colorScheme.error,
-        behavior: SnackBarBehavior.floating,
         content: Text(
           message,
-          style: GoogleFonts.roboto(textStyle: const TextStyle(fontSize: 16)),
+          style: GoogleFonts.openSans(fontSize: 16),
         ),
+        backgroundColor: success
+            ? const Color(0xFF00D38C)
+            : Theme.of(context).colorScheme.error,
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
@@ -63,111 +89,115 @@ class _UpdateUsernamePage extends State<UpdateUsernamePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0C130E),
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0C130E),
+        backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.grey.shade400),
-          onPressed: () {
-            Navigator.pop(context);
-          },
+          icon: Icon(
+            Icons.arrow_back,
+            color: Colors.white70,
+          ),
+          onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                left: 20,
-                right: 20,
-              ),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: constraints.maxHeight,
-                ),
-                child: IntrinsicHeight(
-                  child: Form(
-                    key: formKey,
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 40),
-                        // Header text
-                        Text(
-                          'Update Username',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        // Icon
-                        Text(
-                          '✏️',
-                          style: TextStyle(
-                            fontSize: 50,
-                            color: Colors.yellow.shade600,
-                          ),
-                        ),
-                        const SizedBox(height: 40),
-                        // Username TextField
-                        TextFormField(
-                          controller: usernameController,
-                          style: const TextStyle(color: Colors.white),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter your Username';
-                            }
-                            return null;
-                          },
-                          decoration: InputDecoration(
-                            hintText: 'New Username',
-                            hintStyle: const TextStyle(color: Colors.white54),
-                            filled: true,
-                            fillColor: const Color(0xFF191E1D),
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 16),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(30),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        const Spacer(),
-                        // Update Button
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              if (formKey.currentState?.validate() ?? false) {
-                                updateUsername();
-                              }
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF00D38C),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(30),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                            ),
-                            child: const Text(
-                              'Update username',
-                              style: TextStyle(
-                                  color: Colors.black, fontSize: 16),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                      ],
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF004D43), Color(0xFF046307)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 40),
+                  FadeTransition(
+                    opacity: _headerFade,
+                    child: Text(
+                      'Update Username',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontSize: 32,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                ),
+                  const SizedBox(height: 20),
+                  ScaleTransition(
+                    scale: _iconScale,
+                    child: CircleAvatar(
+                      radius: 40,
+                      backgroundColor: Colors.white24,
+                      child: Icon(
+                        Icons.edit,
+                        size: 40,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+                  FadeTransition(
+                    opacity: _fieldFade,
+                    child: TextFormField(
+                      controller: _usernameController,
+                      style: const TextStyle(color: Colors.white),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter your username';
+                        }
+                        return null;
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'New Username',
+                        hintStyle: const TextStyle(color: Colors.white54),
+                        filled: true,
+                        fillColor: const Color(0xFF191E1D),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 16),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(30),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  FadeTransition(
+                    opacity: _buttonFade,
+                    child: SizedBox(
+                      height: 56,
+                      child: ElevatedButton(
+                        onPressed: _updateUsername,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF00D38C),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                        ),
+                        child: Text(
+                          'Update Username',
+                          style: GoogleFonts.openSans(
+                            color: Colors.black,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
               ),
-            );
-          },
+            ),
+          ),
         ),
       ),
     );

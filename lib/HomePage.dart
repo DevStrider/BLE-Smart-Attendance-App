@@ -1,29 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'ProfilePage.dart';
-import 'RecordAttendancePage.dart';
-import 'TakeAttendancePage.dart';
-
 import 'package:firebase_auth/firebase_auth.dart';
-
-void main() {
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: const HomePage(),
-      theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF0C130E),
-      ),
-    );
-  }
-}
+import 'ProfilePage.dart';
+import 'TakeAttendancePage.dart';
+import 'RecordAttendancePage.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -32,174 +12,317 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage>
+    with SingleTickerProviderStateMixin {
   String? selectedCourse;
   final List<String> courses = [
-    'Transmission and Switching (NETW601)',
-    'Computer System Architecture (NETW603)',
+    'Transmission & Switching (NETW601)',
+    'Networks Lab (NETW602)',
+    'Computer Architecture (NETW603)',
     'Network Protocols (NETW703)',
-    'Introduction to Management (MNGT601)',
-    'Modelling and Simulation (NETW707)',
+    'Intro to Management (MNGT601)',
+    'Modeling & Simulation (NETW707)',
     'Channel Coding (COMM604)',
   ];
 
+  late final AnimationController _ctrl;
+  late final Animation<double> _greetAnim;
+  late final Animation<double> _dropdownAnim;
+  late final Animation<double> _buttonsAnim;
+
   @override
-  Widget build(BuildContext context) {
-    final String welcomeName = FirebaseAuth.instance.currentUser?.displayName ?? 'Student';
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0C130E),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0C130E),
-        automaticallyImplyLeading: false,
-        iconTheme: const IconThemeData(color: Colors.white),
+    _greetAnim = CurvedAnimation(
+      parent: _ctrl,
+      curve: const Interval(0.0, 0.3, curve: Curves.easeOut),
+    );
+    _dropdownAnim = CurvedAnimation(
+      parent: _ctrl,
+      curve: const Interval(0.3, 0.6, curve: Curves.easeOut),
+    );
+    _buttonsAnim = CurvedAnimation(
+      parent: _ctrl,
+      curve: const Interval(0.6, 1.0, curve: Curves.easeOut),
+    );
+
+    _ctrl.forward();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _showCoursePicker() async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.black54,
+      barrierColor: Colors.black87,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      body: SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            minHeight: MediaQuery.of(context).size.height,
-          ),
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF000000), Color(0xFF004D43)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: SingleChildScrollView(
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Welcome text
-                  Text(
-                    'Welcome $welcomeName',
-                    style: GoogleFonts.roboto(
-                      textStyle: const TextStyle(
+                  Container(
+                    margin: const EdgeInsets.symmetric(vertical: 12),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white54,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Text(
+                      'Select Course',
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
                         color: Colors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 40),
-
-                  // Dropdown button
-                  SizedBox(
-                    width: MediaQuery.of(context).size.width * 0.9,
-                    child: DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      dropdownColor: const Color(0xFF191E1D),
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
-                      decoration: InputDecoration(
-                        labelText: 'Select Course',
-                        labelStyle: const TextStyle(color: Colors.white54),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
+                  const Divider(color: Colors.white24, height: 1),
+                  const SizedBox(height: 8),
+                  Column(
+                    children: courses.map((course) {
+                      final isSelected = course == selectedCourse;
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isSelected ? Colors.white10 : Colors.transparent,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isSelected ? Colors.white60 : Colors.transparent,
+                          ),
                         ),
-                        prefixIcon: const Icon(Icons.school, color: Colors.white54),
-                      ),
-                      value: selectedCourse,
-                      icon: const Icon(Icons.arrow_drop_down, color: Colors.white54),
-                      items: courses.map((String course) {
-                        return DropdownMenuItem<String>(
-                          value: course,
-                          child: Text(
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                          title: Text(
                             course,
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                            style: const TextStyle(fontSize: 14),
+                            style: GoogleFonts.openSans(
+                              color: Colors.white,
+                              fontSize: 14,
+                            ),
                           ),
-                        );
-                      }).toList(),
-                      onChanged: (String? newValue) {
-                        setState(() {
-                          selectedCourse = newValue;
-                        });
-                      },
-                      menuMaxHeight: 300,
-                    ),
-                  ),
-                  const SizedBox(height: 30),
-
-                  // Row with buttons placed side by side using Expanded widgets
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: selectedCourse == null
-                              ? null
-                              : () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const TakeAttendancePage(),
-                              ),
-                            );
+                          trailing: isSelected
+                              ? const Icon(Icons.check_circle, color: Color(0xFF00D38C))
+                              : null,
+                          onTap: () {
+                            setState(() {
+                              selectedCourse = course;
+                            });
+                            Navigator.pop(context);
                           },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF00D38C),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                          ),
-                          child: const Text(
-                            'Take Attendance',
-                            style: TextStyle(color: Colors.black),
-                          ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: selectedCourse == null
-                              ? null
-                              : () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => RecordAttendancePage(
-                                  selectedCourse: selectedCourse!,
-                                ),
-                              ),
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF00D38C),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                          ),
-                          child: const Text(
-                            'Record Attendance',
-                            style: TextStyle(color: Colors.black),
-                          ),
-                        ),
-                      ),
-                    ],
+                      );
+                    }).toList(),
                   ),
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 16),
                 ],
               ),
             ),
           ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final name = FirebaseAuth.instance.currentUser?.displayName ?? 'Student';
+    final hasSelection = selectedCourse != null;
+
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF004D43), Color(0xFF046307)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
         ),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: 'Profile',
-          ),
-        ],
-        currentIndex: 0,
-        selectedItemColor: const Color(0xFF00D38C),
-        unselectedItemColor: Colors.grey,
-        backgroundColor: const Color(0xFF1E1E1E),
-        onTap: (index) {
-          if (index == 1) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const ProfilePage(),
+        child: SafeArea(
+          child: Column(
+            children: [
+              const SizedBox(height: 24),
+              FadeTransition(
+                opacity: _greetAnim,
+                child: SlideTransition(
+                  position: _greetAnim.drive(
+                    Tween<Offset>(begin: const Offset(0, -0.2), end: Offset.zero),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 28,
+                          backgroundColor: Colors.white24,
+                          child: const Icon(Icons.person, size: 32, color: Colors.white),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Text(
+                            'Welcome, $name',
+                            style: GoogleFonts.poppins(
+                              fontSize: 26, color: Colors.white, fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.settings, color: Colors.white70),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const ProfilePage()),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-            );
-          }
-        },
+              const SizedBox(height: 32),
+              FadeTransition(
+                opacity: _dropdownAnim,
+                child: SlideTransition(
+                  position: _dropdownAnim.drive(
+                    Tween<Offset>(begin: const Offset(0, -0.2), end: Offset.zero),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: _showCoursePicker,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                        decoration: BoxDecoration(
+                          color: hasSelection ? Colors.white54 : Colors.white24,
+                          borderRadius: BorderRadius.circular(hasSelection ? 24 : 16),
+                          boxShadow: hasSelection
+                              ? [BoxShadow(color: Colors.black38, blurRadius: 10, offset: Offset(0, 6))]
+                              : [],
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.menu_book, color: Colors.white70),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                selectedCourse ?? 'Select Course',
+                                style: GoogleFonts.openSans(
+                                  color: hasSelection ? Colors.white : Colors.white70,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                            AnimatedRotation(
+                              turns: hasSelection ? 0.5 : 0.0,
+                              duration: const Duration(milliseconds: 300),
+                              child: const Icon(Icons.arrow_drop_down, color: Colors.white70),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const Spacer(),
+              FadeTransition(
+                opacity: _buttonsAnim,
+                child: SlideTransition(
+                  position: _buttonsAnim.drive(
+                    Tween<Offset>(begin: const Offset(0, 0.2), end: Offset.zero),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: selectedCourse == null
+                                ? null
+                                : () => Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const TakeAttendancePage(selectedCourse: '',)),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: const Color(0xFF046307),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              minimumSize: const Size(double.infinity, 140),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.qr_code_scanner, size: 32),
+                                const SizedBox(height: 8),
+                                Text('Scan to\nTake\nAttendance', textAlign: TextAlign.center, style: GoogleFonts.openSans(fontSize: 14, fontWeight: FontWeight.w600)),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: selectedCourse == null
+                                ? null
+                                : () => Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => RecordAttendancePage(selectedCourse: selectedCourse!)),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: const Color(0xFF046307),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              minimumSize: const Size(double.infinity, 140),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.list_alt, size: 32),
+                                const SizedBox(height: 8),
+                                Text('Record\nAttendance', textAlign: TextAlign.center, style: GoogleFonts.openSans(fontSize: 14, fontWeight: FontWeight.w600)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 48),
+            ],
+          ),
+        ),
       ),
     );
   }
