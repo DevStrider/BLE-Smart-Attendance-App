@@ -1,32 +1,62 @@
 import 'package:firebase_database/firebase_database.dart';
 
 class DatabaseService {
-  final FirebaseDatabase _firebaseDatabase = FirebaseDatabase.instance;
+  final FirebaseDatabase _db;
 
-  Future<void> create({
-    required String path,
-    required Map<String , dynamic> data
-  })async {
-    final DatabaseReference ref = _firebaseDatabase.ref().child(path);
-    await ref.set(data);
+  DatabaseService({ FirebaseDatabase? database })
+      : _db = database ?? FirebaseDatabase.instance {
+    _db.setPersistenceEnabled(true);
+    _db.setPersistenceCacheSizeBytes(10 * 1024 * 1024);
   }
 
-  Future<DataSnapshot?> read ({required String path}) async{
-    final DatabaseReference ref = _firebaseDatabase.ref().child(path);
-    final DataSnapshot snapshot = await ref.get();
-    return snapshot.exists ? snapshot : null;
+  Future<String> create({
+    required String path,
+    required Map<String, dynamic> data,
+    bool generateKey = false,
+  }) async {
+    try {
+      DatabaseReference ref = _db.ref(path);
+      if (generateKey) {
+        ref = ref.push();
+      }
+      await ref.set(data);
+      return ref.key!;
+    } catch (e) {
+      // You can log here or wrap in a custom exception
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>?> read({ required String path }) async {
+    try {
+      final snapshot = await _db.ref(path).get();
+      if (!snapshot.exists || snapshot.value == null) return null;
+      return Map<String, dynamic>.from(snapshot.value as Map);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Stream<DatabaseEvent> subscribe(String path) {
+    return _db.ref(path).onValue;
   }
 
   Future<void> update({
     required String path,
-    required Map<String , dynamic> data,
-  }) async{
-    final DatabaseReference ref = _firebaseDatabase.ref().child(path);
-    await ref.update(data);
+    required Map<String, dynamic> data,
+  }) async {
+    try {
+      await _db.ref(path).update(data);
+    } catch (e) {
+      rethrow;
+    }
   }
 
-  Future<void> delete({required String path}) async{
-    final DatabaseReference ref = _firebaseDatabase.ref().child(path);
-    await ref.remove();
+  Future<void> delete({ required String path }) async {
+    try {
+      await _db.ref(path).remove();
+    } catch (e) {
+      rethrow;
+    }
   }
 }

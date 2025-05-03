@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'database_service.dart';
 
 class RecordAttendancePage extends StatefulWidget {
   final String selectedCourse;
@@ -12,32 +14,63 @@ class RecordAttendancePage extends StatefulWidget {
 
 class _RecordAttendancePageState extends State<RecordAttendancePage>
     with SingleTickerProviderStateMixin {
+  final DatabaseService _dbService = DatabaseService();
   late AnimationController _animController;
   late Animation<double> _progressAnim;
 
-  final int attendanceCount = 8;
-  final int absenceCount = 2;
-  late final int totalSessions;
-  late final double attendanceRate;
+  int attendanceCount = 0;
+  int absenceCount = 0;
+  bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    totalSessions = attendanceCount + absenceCount;
-    attendanceRate = totalSessions > 0 ? attendanceCount / totalSessions : 0;
-
     _animController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
-    )..forward();
+    );
+    _progressAnim = Tween<double>(begin: 0.0, end: 0.0).animate(
+      CurvedAnimation(parent: _animController, curve: const Interval(0.5, 0.8, curve: Curves.easeOut)),
+    );
+    _loadAttendanceData();
+  }
 
-    _progressAnim = Tween<double>(
-      begin: 0.0,
-      end: attendanceRate,
-    ).animate(CurvedAnimation(
-      parent: _animController,
-      curve: const Interval(0.5, 0.8, curve: Curves.easeOut),
-    ));
+  Future<void> _loadAttendanceData() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      setState(() => _loading = false);
+      return;
+    }
+    final uid = user.uid;
+    final path = 'attendance/${widget.selectedCourse}';
+    final data = await _dbService.read(path: path);
+
+    int attended = 0;
+    int absent = 0;
+    if (data != null) {
+      data.forEach((date, records) {
+        if (records is Map<String, dynamic> && records.containsKey(uid)) {
+          final record = Map<String, dynamic>.from(records[uid]);
+          final status = record['status'] as String? ?? '';
+          if (status == 'attended') attended++;
+          else if (status == 'absent') absent++;
+        }
+      });
+    }
+
+    final total = attended + absent;
+    final rate = total > 0 ? attended / total : 0.0;
+
+    setState(() {
+      attendanceCount = attended;
+      absenceCount = absent;
+      _loading = false;
+      _progressAnim = Tween<double>(begin: 0.0, end: rate).animate(
+        CurvedAnimation(parent: _animController, curve: const Interval(0.5, 0.8, curve: Curves.easeOut)),
+      );
+    });
+
+    _animController.forward();
   }
 
   @override
@@ -48,6 +81,8 @@ class _RecordAttendancePageState extends State<RecordAttendancePage>
 
   @override
   Widget build(BuildContext context) {
+    final totalSessions = attendanceCount + absenceCount;
+
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -58,9 +93,11 @@ class _RecordAttendancePageState extends State<RecordAttendancePage>
           ),
         ),
         child: SafeArea(
-          child: Column(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : Column(
             children: [
-              // ← HEADER IS NOW STATIC (no SlideTransition)
+              // Header
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
                 child: Row(
@@ -99,7 +136,7 @@ class _RecordAttendancePageState extends State<RecordAttendancePage>
                 ),
               ),
 
-              // Chart (no slide, only progress sweep)
+              // Chart
               Container(
                 margin: const EdgeInsets.symmetric(vertical: 16.0),
                 height: 180,
@@ -116,8 +153,7 @@ class _RecordAttendancePageState extends State<RecordAttendancePage>
                             value: _progressAnim.value,
                             backgroundColor: Colors.white12,
                             valueColor: const AlwaysStoppedAnimation<Color>(
-                              Color(0xFF00D38C),
-                            ),
+                                Color(0xFF00D38C)),
                             strokeWidth: 12,
                           ),
                         ),
@@ -138,7 +174,7 @@ class _RecordAttendancePageState extends State<RecordAttendancePage>
                 ),
               ),
 
-              // Info rows (static)
+              // Info rows
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24.0),
                 child: Column(

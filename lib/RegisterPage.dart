@@ -1,6 +1,8 @@
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'database_service.dart';
 import 'auth_service.dart';
 import 'HomePage.dart';
 
@@ -13,17 +15,20 @@ class RegisterPage extends StatefulWidget {
 
 class _RegisterPageState extends State<RegisterPage>
     with SingleTickerProviderStateMixin {
-  // --- Controllers & FocusNodes ---
+  // Controllers & FocusNodes
   final TextEditingController firstNameController = TextEditingController();
-  final TextEditingController lastNameController = TextEditingController();
-  final TextEditingController emailController = TextEditingController();
-  final TextEditingController passwordController = TextEditingController();
+  final TextEditingController lastNameController  = TextEditingController();
+  final TextEditingController emailController     = TextEditingController();
+  final TextEditingController passwordController  = TextEditingController();
   final FocusNode _firstNameFocus = FocusNode();
-  final FocusNode _lastNameFocus = FocusNode();
-  final FocusNode _emailFocus = FocusNode();
-  final FocusNode _passwordFocus = FocusNode();
+  final FocusNode _lastNameFocus  = FocusNode();
+  final FocusNode _emailFocus     = FocusNode();
+  final FocusNode _passwordFocus  = FocusNode();
 
-  // --- State ---
+  // Services
+  final DatabaseService _dbService = DatabaseService();
+
+  // State
   String errorMessage = '';
   bool isLoading = false;
   bool _visible = false;
@@ -52,8 +57,8 @@ class _RegisterPageState extends State<RegisterPage>
 
   Future<void> register() async {
     if (firstNameController.text.isEmpty ||
-        lastNameController.text.isEmpty ||
-        emailController.text.isEmpty ||
+        lastNameController.text.isEmpty  ||
+        emailController.text.isEmpty     ||
         passwordController.text.isEmpty) {
       setState(() {
         errorMessage = 'Please fill in all fields';
@@ -67,29 +72,53 @@ class _RegisterPageState extends State<RegisterPage>
     });
 
     try {
+      // 1. Create Auth user
       await authService.value.createAccount(
         email: emailController.text.trim(),
         password: passwordController.text.trim(),
       );
 
-      await FirebaseAuth.instance.currentUser
-          ?.updateDisplayName(
-          '${firstNameController.text} ${lastNameController.text}');
+      // 2. Set displayName
+      final user = FirebaseAuth.instance.currentUser;
+      await user?.updateDisplayName(
+        '${firstNameController.text} ${lastNameController.text}',
+      );
 
+      // 3. Create profile in Realtime Database
+      if (user != null) {
+        final uid = user.uid;
+        await _dbService.create(
+          path: 'students/$uid',
+          data: {
+            'name': user.displayName,
+            'email': user.email,
+            'createdAt': ServerValue.timestamp,
+            // add more default fields if needed
+          },
+          generateKey: false,
+        );
+      }
+
+      // 4. Navigate to Home
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const HomePage()),
       );
     } on FirebaseAuthException catch (e) {
       setState(() {
-        errorMessage = e.message ??
-            'There was an error during registration';
+        errorMessage = e.message ?? 'Error during registration';
+      });
+    } catch (e) {
+      // DB write error
+      debugPrint('Database error: $e');
+      setState(() {
+        errorMessage = 'Could not save profile. Please try again.';
       });
     } finally {
       if (mounted) {
         setState(() {
-          isLoading = false;
-        });
+        isLoading = false;
+      });
       }
     }
   }
@@ -97,7 +126,7 @@ class _RegisterPageState extends State<RegisterPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // No AppBar—back arrow is in the body so the gradient fills the full screen
+      // Full-screen gradient
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -139,7 +168,7 @@ class _RegisterPageState extends State<RegisterPage>
 
                         const SizedBox(height: 20),
 
-                        // Lock icon circle
+                        // Lock icon
                         Container(
                           padding: const EdgeInsets.all(24),
                           decoration: BoxDecoration(
@@ -155,7 +184,7 @@ class _RegisterPageState extends State<RegisterPage>
 
                         const SizedBox(height: 24),
 
-                        // Title
+                        // Title & subtitle
                         Text(
                           'Register',
                           textAlign: TextAlign.center,
@@ -167,10 +196,7 @@ class _RegisterPageState extends State<RegisterPage>
                             ),
                           ),
                         ),
-
                         const SizedBox(height: 8),
-
-                        // Subtitle
                         Text(
                           'Create your account',
                           textAlign: TextAlign.center,
@@ -188,19 +214,15 @@ class _RegisterPageState extends State<RegisterPage>
                           focusNode: _firstNameFocus,
                           style: const TextStyle(color: Colors.white),
                           textInputAction: TextInputAction.next,
-                          onSubmitted: (_) => FocusScope.of(context)
-                              .requestFocus(_lastNameFocus),
+                          onSubmitted: (_) =>
+                              FocusScope.of(context).requestFocus(_lastNameFocus),
                           decoration: InputDecoration(
                             hintText: 'First Name',
-                            hintStyle:
-                            const TextStyle(color: Colors.white54),
+                            hintStyle: const TextStyle(color: Colors.white54),
                             filled: true,
                             fillColor: Colors.white24,
                             contentPadding:
-                            const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 16,
-                            ),
+                            const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(30),
                               borderSide: BorderSide.none,
@@ -216,19 +238,15 @@ class _RegisterPageState extends State<RegisterPage>
                           focusNode: _lastNameFocus,
                           style: const TextStyle(color: Colors.white),
                           textInputAction: TextInputAction.next,
-                          onSubmitted: (_) => FocusScope.of(context)
-                              .requestFocus(_emailFocus),
+                          onSubmitted: (_) =>
+                              FocusScope.of(context).requestFocus(_emailFocus),
                           decoration: InputDecoration(
                             hintText: 'Last Name',
-                            hintStyle:
-                            const TextStyle(color: Colors.white54),
+                            hintStyle: const TextStyle(color: Colors.white54),
                             filled: true,
                             fillColor: Colors.white24,
                             contentPadding:
-                            const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 16,
-                            ),
+                            const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(30),
                               borderSide: BorderSide.none,
@@ -245,19 +263,15 @@ class _RegisterPageState extends State<RegisterPage>
                           keyboardType: TextInputType.emailAddress,
                           style: const TextStyle(color: Colors.white),
                           textInputAction: TextInputAction.next,
-                          onSubmitted: (_) => FocusScope.of(context)
-                              .requestFocus(_passwordFocus),
+                          onSubmitted: (_) =>
+                              FocusScope.of(context).requestFocus(_passwordFocus),
                           decoration: InputDecoration(
                             hintText: 'Email',
-                            hintStyle:
-                            const TextStyle(color: Colors.white54),
+                            hintStyle: const TextStyle(color: Colors.white54),
                             filled: true,
                             fillColor: Colors.white24,
                             contentPadding:
-                            const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 16,
-                            ),
+                            const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(30),
                               borderSide: BorderSide.none,
@@ -277,15 +291,11 @@ class _RegisterPageState extends State<RegisterPage>
                           onSubmitted: (_) => register(),
                           decoration: InputDecoration(
                             hintText: 'Password',
-                            hintStyle:
-                            const TextStyle(color: Colors.white54),
+                            hintStyle: const TextStyle(color: Colors.white54),
                             filled: true,
                             fillColor: Colors.white24,
                             contentPadding:
-                            const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 16,
-                            ),
+                            const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(30),
                               borderSide: BorderSide.none,
@@ -298,8 +308,7 @@ class _RegisterPageState extends State<RegisterPage>
                         // Error message
                         if (errorMessage.isNotEmpty)
                           Padding(
-                            padding:
-                            const EdgeInsets.symmetric(horizontal: 12),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
                             child: Text(
                               errorMessage,
                               style: const TextStyle(

@@ -4,6 +4,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'dart:async';
 import 'dart:math';
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'database_service.dart';
 
 // Smoothed radar with motion blur effect and eased beam
 class AppColors {
@@ -33,6 +35,7 @@ class TakeAttendancePage extends StatefulWidget {
 
 class _TakeAttendancePageState extends State<TakeAttendancePage>
     with SingleTickerProviderStateMixin {
+  final DatabaseService _dbService = DatabaseService();
   bool _isScanning = false;
   bool _found = false;
   ScanResult? _result;
@@ -112,6 +115,7 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
             _found = true;
             _result = r;
           });
+          _recordAttendance(r);
           break;
         }
       }
@@ -119,6 +123,31 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
     });
 
     await FlutterBluePlus.startScan(timeout: const Duration(seconds: 8));
+  }
+
+  Future<void> _recordAttendance(ScanResult result) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+      final uid = user.uid;
+      final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final distance = pow(10, (-59 - result.rssi) / 20).toDouble();
+      final status = distance <= 8 ? 'attended' : 'absent';
+
+      await _dbService.create(
+        path: 'attendance/${widget.selectedCourse}/$dateStr/$uid',
+        data: {
+          'timestampStart': nowMs,
+          'timestampEnd': nowMs,
+          'status': status,
+          'beaconUuid': result.device.id.toString(),
+        },
+        generateKey: false,
+      );
+    } catch (e) {
+      debugPrint('Error recording attendance: $e');
+    }
   }
 
   void _stopScan() {

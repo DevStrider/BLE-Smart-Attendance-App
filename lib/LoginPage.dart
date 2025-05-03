@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'auth_service.dart';
 import 'HomePage.dart';
 import 'ResetPasswordPage.dart';
+import 'database_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -18,6 +19,9 @@ class _LoginPageState extends State<LoginPage>
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   final FocusNode _passwordFocusNode = FocusNode();
+
+  // Services
+  final DatabaseService _dbService = DatabaseService();
 
   // State
   String errorMessage = '';
@@ -42,13 +46,12 @@ class _LoginPageState extends State<LoginPage>
     super.dispose();
   }
 
-  /// Same slide-&-fade transition used on WelcomePage
   Route _createRoute(Widget page) {
     return PageRouteBuilder(
       transitionDuration: const Duration(milliseconds: 600),
       reverseTransitionDuration: const Duration(milliseconds: 400),
       pageBuilder: (context, animation, secondaryAnimation) => page,
-      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      transitionsBuilder: (context, animation, secAnim, child) {
         final slideAnim = Tween<Offset>(
           begin: const Offset(0, 0.1),
           end: Offset.zero,
@@ -78,12 +81,20 @@ class _LoginPageState extends State<LoginPage>
       isLoading = true;
     });
     try {
+      // Authenticate with Firebase Auth
       await authService.value.signIn(
         email: emailController.text.trim(),
         password: passwordController.text.trim(),
       );
-      // replace with animated transition
-      Navigator.of(context).pushReplacement(_createRoute(const HomePage()));
+
+      // Optionally fetch the user profile from Realtime Database
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      final profile =
+      await _dbService.read(path: 'students/$uid');
+
+      Navigator.of(context).pushReplacement(
+        _createRoute(const HomePage()),
+      );
     } on FirebaseAuthException catch (e) {
       setState(() {
         errorMessage = e.message ?? 'An error occurred during sign in';
@@ -96,7 +107,6 @@ class _LoginPageState extends State<LoginPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Gradient background
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -191,11 +201,12 @@ class _LoginPageState extends State<LoginPage>
                               .requestFocus(_passwordFocusNode),
                           decoration: InputDecoration(
                             hintText: 'Email',
-                            hintStyle: const TextStyle(color: Colors.white54),
+                            hintStyle:
+                            const TextStyle(color: Colors.white54),
                             filled: true,
                             fillColor: Colors.white24,
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 16),
+                            contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(30),
                               borderSide: BorderSide.none,
@@ -215,11 +226,12 @@ class _LoginPageState extends State<LoginPage>
                           onSubmitted: (_) => signIn(),
                           decoration: InputDecoration(
                             hintText: 'Password',
-                            hintStyle: const TextStyle(color: Colors.white54),
+                            hintStyle:
+                            const TextStyle(color: Colors.white54),
                             filled: true,
                             fillColor: Colors.white24,
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 16),
+                            contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(30),
                               borderSide: BorderSide.none,
