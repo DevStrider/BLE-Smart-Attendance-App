@@ -2,6 +2,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
 import 'database_service.dart';
 import 'auth_service.dart';
 import 'HomePage.dart';
@@ -18,10 +19,13 @@ class _RegisterPageState extends State<RegisterPage>
   // Controllers & FocusNodes
   final TextEditingController firstNameController = TextEditingController();
   final TextEditingController lastNameController  = TextEditingController();
+  final TextEditingController idController        = TextEditingController();
   final TextEditingController emailController     = TextEditingController();
   final TextEditingController passwordController  = TextEditingController();
+
   final FocusNode _firstNameFocus = FocusNode();
   final FocusNode _lastNameFocus  = FocusNode();
+  final FocusNode _idFocus        = FocusNode();
   final FocusNode _emailFocus     = FocusNode();
   final FocusNode _passwordFocus  = FocusNode();
 
@@ -30,8 +34,8 @@ class _RegisterPageState extends State<RegisterPage>
 
   // State
   String errorMessage = '';
-  bool isLoading = false;
-  bool _visible = false;
+  bool isLoading   = false;
+  bool _visible    = false;
 
   @override
   void initState() {
@@ -46,10 +50,12 @@ class _RegisterPageState extends State<RegisterPage>
   void dispose() {
     firstNameController.dispose();
     lastNameController.dispose();
+    idController.dispose();
     emailController.dispose();
     passwordController.dispose();
     _firstNameFocus.dispose();
     _lastNameFocus.dispose();
+    _idFocus.dispose();
     _emailFocus.dispose();
     _passwordFocus.dispose();
     super.dispose();
@@ -58,6 +64,7 @@ class _RegisterPageState extends State<RegisterPage>
   Future<void> register() async {
     if (firstNameController.text.isEmpty ||
         lastNameController.text.isEmpty  ||
+        idController.text.isEmpty        ||
         emailController.text.isEmpty     ||
         passwordController.text.isEmpty) {
       setState(() {
@@ -68,32 +75,32 @@ class _RegisterPageState extends State<RegisterPage>
 
     setState(() {
       errorMessage = '';
-      isLoading = true;
+      isLoading    = true;
     });
 
     try {
       // 1. Create Auth user
       await authService.value.createAccount(
-        email: emailController.text.trim(),
+        email:    emailController.text.trim(),
         password: passwordController.text.trim(),
       );
 
-      // 2. Set displayName
+      // 2. Set displayName on the Firebase User
       final user = FirebaseAuth.instance.currentUser;
       await user?.updateDisplayName(
         '${firstNameController.text} ${lastNameController.text}',
       );
 
-      // 3. Create profile in Realtime Database
+      // 3. Write profile (including studentId) to Realtime Database
       if (user != null) {
         final uid = user.uid;
         await _dbService.create(
           path: 'students/$uid',
           data: {
-            'name': user.displayName,
-            'email': user.email,
+            'name':      user.displayName,
+            'email':     user.email,
+            'studentId': idController.text.trim(),
             'createdAt': ServerValue.timestamp,
-            // add more default fields if needed
           },
           generateKey: false,
         );
@@ -109,7 +116,6 @@ class _RegisterPageState extends State<RegisterPage>
         errorMessage = e.message ?? 'Error during registration';
       });
     } catch (e) {
-      // DB write error
       debugPrint('Database error: $e');
       setState(() {
         errorMessage = 'Could not save profile. Please try again.';
@@ -117,8 +123,8 @@ class _RegisterPageState extends State<RegisterPage>
     } finally {
       if (mounted) {
         setState(() {
-        isLoading = false;
-      });
+          isLoading = false;
+        });
       }
     }
   }
@@ -126,7 +132,6 @@ class _RegisterPageState extends State<RegisterPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Full-screen gradient
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -143,8 +148,7 @@ class _RegisterPageState extends State<RegisterPage>
               builder: (context, constraints) => SingleChildScrollView(
                 padding: EdgeInsets.only(
                   bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                  left: 24,
-                  right: 24,
+                  left: 24, right: 24,
                 ),
                 child: ConstrainedBox(
                   constraints:
@@ -218,11 +222,13 @@ class _RegisterPageState extends State<RegisterPage>
                               FocusScope.of(context).requestFocus(_lastNameFocus),
                           decoration: InputDecoration(
                             hintText: 'First Name',
-                            hintStyle: const TextStyle(color: Colors.white54),
+                            hintStyle:
+                            const TextStyle(color: Colors.white54),
                             filled: true,
                             fillColor: Colors.white24,
                             contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                            const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 16),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(30),
                               borderSide: BorderSide.none,
@@ -239,14 +245,43 @@ class _RegisterPageState extends State<RegisterPage>
                           style: const TextStyle(color: Colors.white),
                           textInputAction: TextInputAction.next,
                           onSubmitted: (_) =>
-                              FocusScope.of(context).requestFocus(_emailFocus),
+                              FocusScope.of(context).requestFocus(_idFocus),
                           decoration: InputDecoration(
                             hintText: 'Last Name',
-                            hintStyle: const TextStyle(color: Colors.white54),
+                            hintStyle:
+                            const TextStyle(color: Colors.white54),
                             filled: true,
                             fillColor: Colors.white24,
                             contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                            const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 16),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(30),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // Student ID
+                        TextField(
+                          controller: idController,
+                          focusNode: _idFocus,
+                          style: const TextStyle(color: Colors.white),
+                          keyboardType: TextInputType.text,
+                          textInputAction: TextInputAction.next,
+                          onSubmitted: (_) =>
+                              FocusScope.of(context).requestFocus(_emailFocus),
+                          decoration: InputDecoration(
+                            hintText: 'Student ID',
+                            hintStyle:
+                            const TextStyle(color: Colors.white54),
+                            filled: true,
+                            fillColor: Colors.white24,
+                            contentPadding:
+                            const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 16),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(30),
                               borderSide: BorderSide.none,
@@ -264,14 +299,17 @@ class _RegisterPageState extends State<RegisterPage>
                           style: const TextStyle(color: Colors.white),
                           textInputAction: TextInputAction.next,
                           onSubmitted: (_) =>
-                              FocusScope.of(context).requestFocus(_passwordFocus),
+                              FocusScope.of(context)
+                                  .requestFocus(_passwordFocus),
                           decoration: InputDecoration(
                             hintText: 'Email',
-                            hintStyle: const TextStyle(color: Colors.white54),
+                            hintStyle:
+                            const TextStyle(color: Colors.white54),
                             filled: true,
                             fillColor: Colors.white24,
                             contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                            const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 16),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(30),
                               borderSide: BorderSide.none,
@@ -291,11 +329,13 @@ class _RegisterPageState extends State<RegisterPage>
                           onSubmitted: (_) => register(),
                           decoration: InputDecoration(
                             hintText: 'Password',
-                            hintStyle: const TextStyle(color: Colors.white54),
+                            hintStyle:
+                            const TextStyle(color: Colors.white54),
                             filled: true,
                             fillColor: Colors.white24,
                             contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                            const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 16),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(30),
                               borderSide: BorderSide.none,
@@ -308,7 +348,8 @@ class _RegisterPageState extends State<RegisterPage>
                         // Error message
                         if (errorMessage.isNotEmpty)
                           Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            padding:
+                            const EdgeInsets.symmetric(horizontal: 12),
                             child: Text(
                               errorMessage,
                               style: const TextStyle(
@@ -328,29 +369,37 @@ class _RegisterPageState extends State<RegisterPage>
                             onPressed: isLoading ? null : register,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.white,
-                              foregroundColor: const Color(0xFF046307),
+                              foregroundColor:
+                              const Color(0xFF046307),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(30),
+                                borderRadius:
+                                BorderRadius.circular(30),
                               ),
                               padding:
-                              const EdgeInsets.symmetric(vertical: 16),
+                              const EdgeInsets.symmetric(
+                                  vertical: 16),
                             ),
                             child: isLoading
                                 ? SizedBox(
                               width: 24,
                               height: 24,
-                              child: CircularProgressIndicator(
+                              child:
+                              CircularProgressIndicator(
                                 strokeWidth: 2,
                                 valueColor:
-                                AlwaysStoppedAnimation<Color>(
-                                    const Color(0xFF046307)),
+                                AlwaysStoppedAnimation<
+                                    Color>(
+                                  const Color(
+                                      0xFF046307),
+                                ),
                               ),
                             )
                                 : Text(
                               'Register',
                               style: GoogleFonts.openSans(
                                 fontSize: 16,
-                                fontWeight: FontWeight.w600,
+                                fontWeight:
+                                FontWeight.w600,
                               ),
                             ),
                           ),

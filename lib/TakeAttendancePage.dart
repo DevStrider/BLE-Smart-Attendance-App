@@ -1,33 +1,39 @@
+// lib/TakeAttendancePage.dart
+
+import 'dart:async';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'dart:async';
-import 'dart:math';
 import 'package:intl/intl.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_fonts/google_fonts.dart';
+
 import 'database_service.dart';
 
-// Smoothed radar with motion blur effect and eased beam
+// — your color palette —
 class AppColors {
   static const backgroundStart = Color(0xFF004D43);
-  static const backgroundEnd = Color(0xFF046307);
-  static const card = Color(0xFF1E1E1E);
-  static const beam = Color(0xFF00D38C);
-  static const rings = Color(0xFF00D38C);
-  static const textPrimary = Colors.white;
-  static const textSecondary = Colors.white70;
-  static const error = Color(0xFFFF5252);
+  static const backgroundEnd   = Color(0xFF046307);
+  static const card            = Color(0xFF1E1E1E);
+  static const beam            = Color(0xFF00D38C);
+  static const rings           = Color(0xFF00D38C);
+  static const textPrimary     = Colors.white;
+  static const textSecondary   = Colors.white70;
+  static const error           = Color(0xFFFF5252);
 }
 
 class DeviceBlip {
   final double angle;     // in radians
-  final double distNorm;  // 0.0–1.0, fraction of max radius
+  final double distNorm;  // 0.0–1.0
   DeviceBlip(this.angle, this.distNorm);
 }
 
 class TakeAttendancePage extends StatefulWidget {
   final String selectedCourse;
-  const TakeAttendancePage({super.key, required this.selectedCourse});
+  const TakeAttendancePage({Key? key, required this.selectedCourse})
+      : super(key: key);
 
   @override
   _TakeAttendancePageState createState() => _TakeAttendancePageState();
@@ -36,118 +42,130 @@ class TakeAttendancePage extends StatefulWidget {
 class _TakeAttendancePageState extends State<TakeAttendancePage>
     with SingleTickerProviderStateMixin {
   final DatabaseService _dbService = DatabaseService();
+
   bool _isScanning = false;
-  bool _found = false;
+  bool _found      = false;
   ScanResult? _result;
   StreamSubscription<List<ScanResult>>? _scanSub;
-
-  // map deviceId → blip so we only add each once
   final Map<String, DeviceBlip> _blipsMap = {};
+  Set<String> _allowedMacs = {};
 
-  // target MAC for “official” attendance
-  final String targetMac = 'BC:57:29:00:4B:3A';
-
-  late AnimationController _beamCtrl;
-  late Animation<double> _beamAnim;
+  late AnimationController _pulseCtrl;
+  late Animation<double>   _pulseAnim;
 
   @override
   void initState() {
     super.initState();
-    _beamCtrl = AnimationController(
+
+    // pulsing center icon
+    _pulseCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 4),
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+    _pulseAnim = Tween<double>(begin: 0.6, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
     );
-    _beamAnim = Tween<double>(begin: 0, end: 2 * pi).animate(
-      CurvedAnimation(parent: _beamCtrl, curve: Curves.easeInOut),
-    );
-    _requestPermissions().then((_) {
-      _startScan();
-      _beamCtrl.repeat();
+
+    // load beacon definitions to filter by course
+    _loadDefinitions().then((_) {
+      _requestPermissions().then((_) => _startScan());
     });
+  }
+
+  /// Reads your `/beacons` node and builds the set of MACs for the selected course.
+  Future<void> _loadDefinitions() async {
+    final data = await _dbService.read(path: 'beacons');
+    final allowed = <String>{};
+    if (data != null) {
+      data.forEach((_, def) {
+        final courses = List<String>.from(def['courses'] as List<dynamic>);
+        final mac     = (def['mac'] as String).toUpperCase();
+        if (courses.contains(widget.selectedCourse)) {
+          allowed.add(mac);
+        }
+      });
+    }
+    setState(() => _allowedMacs = allowed);
   }
 
   Future<void> _requestPermissions() async {
     await Permission.bluetoothScan.request();
     await Permission.bluetoothConnect.request();
-    await Permission.location.request();
+    await Permission.locationWhenInUse.request();
   }
 
   @override
   void dispose() {
     _scanSub?.cancel();
-    _beamCtrl.dispose();
+    _pulseCtrl.dispose();
     super.dispose();
   }
 
-  void _toggleScan() {
-    if (_isScanning) {
-      _stopScan();
-      _beamCtrl.stop();
-    } else {
-      _startScan();
-      _beamCtrl.repeat();
-    }
-  }
-
   Future<void> _startScan() async {
+    if (_allowedMacs.isEmpty) {
+      // show an alert instead of a SnackBar
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.card,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            'No Beacon Configured',
+            style: GoogleFonts.poppins(
+                color: AppColors.textPrimary, fontWeight: FontWeight.bold),
+          ),
+          content: Text(
+            'No beacons are associated with "${widget.selectedCourse}".\n'
+                'Please contact your instructor or select another course.',
+            style: GoogleFonts.openSans(color: AppColors.textSecondary),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text('OK', style: GoogleFonts.openSans(color: AppColors.beam)),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _isScanning = true;
-      _found = false;
+      _found      = false;
       _blipsMap.clear();
     });
 
     _scanSub = FlutterBluePlus.scanResults.listen((results) {
       for (var r in results) {
-        final id = r.device.id.toString();
-        // create a blip for each new device
+        final id = r.device.id.toString().toUpperCase();
+
+        // always add a radar blip
         if (!_blipsMap.containsKey(id)) {
           final rng = Random(id.hashCode);
           final angle = rng.nextDouble() * 2 * pi;
-          final dist = pow(10, (-59 - r.rssi) / 20).toDouble();
-          const maxDist = 10.0; // 10 meters
+          final dist  = pow(10, (-59 - r.rssi) / 20).toDouble();
+          const maxDist = 10.0;
           final distNorm = dist > maxDist ? 1.0 : dist / maxDist;
           _blipsMap[id] = DeviceBlip(angle, distNorm);
         }
-        // check for our attendance target
-        if (id.toUpperCase() == targetMac) {
+
+        // only trigger on allowed MACs
+        if (_allowedMacs.contains(id)) {
           _stopScan();
           setState(() {
-            _found = true;
+            _found  = true;
             _result = r;
           });
           _recordAttendance(r);
+          _showResultDialog();
           break;
         }
       }
-      setState(() {}); // redraw with new blips
+      setState(() {}); // redraw blips
     });
 
     await FlutterBluePlus.startScan(timeout: const Duration(seconds: 8));
-  }
-
-  Future<void> _recordAttendance(ScanResult result) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
-      final uid = user.uid;
-      final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      final nowMs = DateTime.now().millisecondsSinceEpoch;
-      final distance = pow(10, (-59 - result.rssi) / 20).toDouble();
-      final status = distance <= 8 ? 'attended' : 'absent';
-
-      await _dbService.create(
-        path: 'attendance/${widget.selectedCourse}/$dateStr/$uid',
-        data: {
-          'timestampStart': nowMs,
-          'timestampEnd': nowMs,
-          'status': status,
-          'beaconUuid': result.device.id.toString(),
-        },
-        generateKey: false,
-      );
-    } catch (e) {
-      debugPrint('Error recording attendance: $e');
-    }
   }
 
   void _stopScan() {
@@ -156,20 +174,142 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
     setState(() => _isScanning = false);
   }
 
+  Future<void> _recordAttendance(ScanResult result) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final uid     = user.uid;
+    final now     = DateTime.now();
+    final dateStr = DateFormat('yyyy-MM-dd').format(now);
+    final ms      = now.millisecondsSinceEpoch;
+    final distance = pow(10, (-59 - result.rssi) / 20).toDouble();
+    final status   = distance <= 2.0 ? 'attended' : 'absent';
+
+    // log raw beacon event
+    await _dbService.create(
+      path: 'beacons',
+      data: {
+        'uuid':       result.device.id.toString(),
+        'course':     widget.selectedCourse,
+        'studentUid': uid,
+        'timestamp':  ms,
+        'rssi':       result.rssi,
+        'distance':   distance,
+      },
+      generateKey: true,
+    );
+
+    // record attendance under date/uid
+    await _dbService.create(
+      path: 'attendance/${widget.selectedCourse}/$dateStr/$uid',
+      data: {
+        'timestampStart': ms,
+        'timestampEnd':   ms,
+        'status':         status,
+        'beaconUuid':     result.device.id.toString(),
+      },
+      generateKey: false,
+    );
+  }
+
+  void _showResultDialog() {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Attendance Details',
+      barrierColor: Colors.black54,
+      transitionDuration: const Duration(milliseconds: 400),
+      pageBuilder: (ctx, anim1, anim2) {
+        final r = _result!;
+        final dist = pow(10, (-59 - r.rssi) / 20).toStringAsFixed(2);
+        final time = DateFormat('hh:mm:ss a').format(DateTime.now());
+        return Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: MediaQuery.of(ctx).size.width * 0.8,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Attendance Details',
+                      style: GoogleFonts.poppins(
+                          color: AppColors.textPrimary,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
+                  _infoRow('Course', widget.selectedCourse),
+                  _infoRow('Device', r.device.id.toString()),
+                  _infoRow('Signal', '${r.rssi} dBm'),
+                  _infoRow('Distance', '$dist m'),
+                  _infoRow('Time', time),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      setState(() => _found = false);
+                      _startScan();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.beam,
+                      minimumSize: const Size(double.infinity, 48),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30)),
+                    ),
+                    child: Text('Scan Again',
+                        style: GoogleFonts.openSans(
+                            color: Colors.black, fontSize: 16)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (ctx, anim1, anim2, child) {
+        return FadeTransition(
+          opacity: anim1,
+          child: ScaleTransition(
+            scale: CurvedAnimation(parent: anim1, curve: Curves.easeOutBack),
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _infoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Text('$label:',
+              style: TextStyle(
+                  color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(value, style: const TextStyle(color: AppColors.textPrimary)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Radar uses 85% of screen width
-    final double radarSize = MediaQuery.of(context).size.width * 0.85;
+    final double cardWidth = MediaQuery.of(context).size.width * 0.8;
 
     return Scaffold(
       appBar: AppBar(
         backgroundColor: AppColors.backgroundStart,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
-          onPressed: () => Navigator.pop(context),
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: Text(
+          'Take Attendance',
+          style: GoogleFonts.poppins(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
         ),
-        title: const Text('Take Attendance',
-            style: TextStyle(color: AppColors.textPrimary)),
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -180,174 +320,101 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
           ),
         ),
         child: SafeArea(
-          child: Stack(
+          child: Column(
             children: [
-              // Radar moved up (y = -0.2)
-              Align(
-                alignment: const Alignment(0, -0.2),
-                child: AnimatedBuilder(
-                  animation: _beamAnim,
-                  builder: (_, child) => CustomPaint(
-                    size: Size(radarSize, radarSize),
-                    painter: _SmoothRadarPainter(
-                      angle: _beamAnim.value,
-                      blips: _blipsMap.values.toList(),
-                    ),
-                    child: child,
-                  ),
-                  child: SizedBox(width: radarSize, height: radarSize),
-                ),
-              ),
+              const SizedBox(height: 24),
 
-              Positioned(
-                bottom: 100,
-                left: MediaQuery.of(context).size.width / 2 - 28,
-                child: FloatingActionButton(
-                  backgroundColor: AppColors.card,
-                  child: Icon(_isScanning ? Icons.stop : Icons.search),
-                  onPressed: _toggleScan,
-                ),
-              ),
-
-              if (_found && _result != null)
-                DraggableScrollableSheet(
-                  initialChildSize: 0.3,
-                  minChildSize: 0.1,
-                  maxChildSize: 0.6,
-                  builder: (context, sc) => Container(
+              // pulsing beacon icon
+              AnimatedBuilder(
+                animation: _pulseAnim,
+                builder: (_, __) => Transform.scale(
+                  scale: _pulseAnim.value,
+                  child: Container(
+                    width: 120,
+                    height: 120,
                     decoration: BoxDecoration(
-                      color: AppColors.card,
-                      borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(16)),
+                      shape: BoxShape.circle,
+                      color: AppColors.beam.withOpacity(0.3),
                     ),
-                    padding: const EdgeInsets.all(16),
-                    child: ListView(
-                      controller: sc,
-                      children: [
-                        Center(
-                          child: Container(
-                            width: 40,
-                            height: 4,
-                            decoration: BoxDecoration(
-                              color: AppColors.textSecondary,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text('Attendance Details',
-                            style: TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold)),
-                        const Divider(color: Colors.white24),
-                        _infoRow('Subject', widget.selectedCourse),
-                        _infoRow('Device', _result!.device.id.toString()),
-                        _infoRow('Signal', '${_result!.rssi} dBm'),
-                        _infoRow(
-                          'Distance',
-                          '${pow(10, (-59 - _result!.rssi) / 20).toStringAsFixed(2)} m',
-                        ),
-                        _infoRow('Date',
-                            DateFormat('yyyy-MM-dd').format(DateTime.now())),
-                        _infoRow('Time',
-                            DateFormat('hh:mm:ss a').format(DateTime.now())),
-                        const SizedBox(height: 16),
-                        Center(
-                          child: Text(
-                            (pow(10, (-59 - _result!.rssi) / 20) <= 8)
-                                ? '✅ Attendance Recorded'
-                                : '❌ Too Far',
-                            style: TextStyle(
-                                color: (pow(10, (-59 - _result!.rssi) / 20) <=
-                                    8)
-                                    ? AppColors.beam
-                                    : AppColors.error,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
+                    child: Center(
+                      child: Icon(
+                        _found ? Icons.check_circle : Icons.wifi_tethering,
+                        size: 60,
+                        color: _found ? AppColors.beam : AppColors.textPrimary,
+                      ),
                     ),
                   ),
                 ),
+              ),
+
+              const SizedBox(height: 16),
+              Text(
+                _found ? 'Beacon Found!' : 'Scanning for Beacons…',
+                style: GoogleFonts.poppins(color: Colors.white, fontSize: 20),
+              ),
+
+              const SizedBox(height: 24),
+
+              // live blip list
+              if (!_found)
+                SizedBox(
+                  height: 100,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    children: _blipsMap.entries.map((e) {
+                      final id = e.key;
+                      final d  = (e.value.distNorm * 100).toInt();
+                      return Container(
+                        width: cardWidth * 0.4,
+                        margin: const EdgeInsets.symmetric(horizontal: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.card,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(id.substring(id.length - 5),
+                                style: const TextStyle(color: Colors.white)),
+                            const SizedBox(height: 8),
+                            LinearProgressIndicator(
+                              value: 1 - e.value.distNorm,
+                              backgroundColor: Colors.white12,
+                              valueColor: const AlwaysStoppedAnimation(AppColors.beam),
+                            ),
+                            const SizedBox(height: 4),
+                            Text('$d%',
+                                style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+
+              const Spacer(),
+
+              // scan/stop button
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                child: ElevatedButton.icon(
+                  onPressed: _isScanning ? _stopScan : _startScan,
+                  icon: Icon(_isScanning ? Icons.stop : Icons.search),
+                  label: Text(_isScanning ? 'Stop Scanning' : 'Start Scan'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.card,
+                    foregroundColor: AppColors.textPrimary,
+                    minimumSize: const Size.fromHeight(56),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
   }
-
-  Widget _infoRow(String label, String value) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 8),
-    child: Row(
-      children: [
-        Text('$label:',
-            style: TextStyle(
-                color: AppColors.textSecondary,
-                fontWeight: FontWeight.w600)),
-        const SizedBox(width: 12),
-        Expanded(
-            child:
-            Text(value, style: TextStyle(color: AppColors.textPrimary))),
-      ],
-    ),
-  );
-}
-
-class _SmoothRadarPainter extends CustomPainter {
-  final double angle;
-  final List<DeviceBlip> blips;
-
-  _SmoothRadarPainter({required this.angle, required this.blips});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = size.center(Offset.zero);
-    final maxR = size.width / 2;
-
-    // Draw concentric rings
-    final ringPaint = Paint()
-      ..color = AppColors.rings.withOpacity(0.2)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
-    for (int i = 1; i <= 3; i++) {
-      canvas.drawCircle(center, maxR * i / 3, ringPaint);
-    }
-
-    // Draw sweeping beam
-    final beamPaint = Paint()
-      ..shader = SweepGradient(
-        startAngle: angle,
-        endAngle: angle + pi / 8,
-        colors: [AppColors.beam.withOpacity(0.3), Colors.transparent],
-        stops: const [0.0, 1.0],
-      ).createShader(Rect.fromCircle(center: center, radius: maxR));
-    canvas.drawCircle(center, maxR, beamPaint);
-
-    // Glow
-    canvas.drawCircle(center, maxR,
-        Paint()..color = AppColors.beam.withOpacity(0.1));
-
-    // Draw red device blips
-    for (var b in blips) {
-      final r = b.distNorm * maxR;
-      // rotate so 0 rad = upward
-      final dx = center.dx + r * cos(b.angle - pi / 2);
-      final dy = center.dy + r * sin(b.angle - pi / 2);
-      canvas.drawCircle(
-          Offset(dx, dy),
-          6,
-          Paint()
-            ..color = Colors.redAccent.withOpacity(0.9)
-            ..style = PaintingStyle.fill);
-    }
-
-    // Center dot
-    canvas.drawCircle(center, 3, Paint()..color = AppColors.beam);
-  }
-
-  @override
-  bool shouldRepaint(covariant _SmoothRadarPainter old) =>
-      old.angle != angle || old.blips.length != blips.length;
 }

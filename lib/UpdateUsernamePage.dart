@@ -1,7 +1,11 @@
+// lib/UpdateUsernamePage.dart
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import 'auth_service.dart';
+import 'database_service.dart';
 
 class UpdateUsernamePage extends StatefulWidget {
   final String? email;
@@ -15,6 +19,9 @@ class _UpdateUsernamePageState extends State<UpdateUsernamePage>
     with SingleTickerProviderStateMixin {
   final TextEditingController _usernameController = TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+
+  // <-- Inject DatabaseService
+  final DatabaseService _dbService = DatabaseService();
 
   late final AnimationController _animController;
   late final Animation<double> _headerFade;
@@ -62,11 +69,27 @@ class _UpdateUsernamePageState extends State<UpdateUsernamePage>
 
   Future<void> _updateUsername() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    final newName = _usernameController.text.trim();
+
+    setState(() {}); // rebuild to disable button if you like
+
     try {
-      await authService.value.updateUsername(username: _usernameController.text);
+      // 1) Update Auth displayName
+      await authService.value.updateUsername(username: newName);
+
+      // 2) Also persist in Realtime Database under students/$uid/name
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      await _dbService.update(
+        path: 'students/$uid',
+        data: {'name': newName},
+      );
+
       _showSnackbar('Username updated successfully', success: true);
     } on FirebaseAuthException catch (e) {
       _showSnackbar(e.message ?? 'Username update failed', success: false);
+    } catch (e) {
+      _showSnackbar('Could not save to database', success: false);
     }
   }
 
@@ -78,9 +101,8 @@ class _UpdateUsernamePageState extends State<UpdateUsernamePage>
           message,
           style: GoogleFonts.openSans(fontSize: 16),
         ),
-        backgroundColor: success
-            ? const Color(0xFF00D38C)
-            : Theme.of(context).colorScheme.error,
+        backgroundColor:
+        success ? const Color(0xFF00D38C) : Theme.of(context).colorScheme.error,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -94,10 +116,7 @@ class _UpdateUsernamePageState extends State<UpdateUsernamePage>
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back,
-            color: Colors.white70,
-          ),
+          icon: const Icon(Icons.arrow_back, color: Colors.white70),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -133,14 +152,10 @@ class _UpdateUsernamePageState extends State<UpdateUsernamePage>
                   const SizedBox(height: 20),
                   ScaleTransition(
                     scale: _iconScale,
-                    child: CircleAvatar(
+                    child: const CircleAvatar(
                       radius: 40,
                       backgroundColor: Colors.white24,
-                      child: Icon(
-                        Icons.edit,
-                        size: 40,
-                        color: Colors.white,
-                      ),
+                      child: Icon(Icons.edit, size: 40, color: Colors.white),
                     ),
                   ),
                   const SizedBox(height: 40),

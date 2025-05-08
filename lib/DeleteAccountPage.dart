@@ -1,4 +1,5 @@
 import 'auth_service.dart';
+import 'database_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -15,10 +16,13 @@ class DeleteAccountPage extends StatefulWidget {
 class _DeleteAccountPageState extends State<DeleteAccountPage>
     with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _emailController    = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final FocusNode _emailFocus = FocusNode();
+  final FocusNode _emailFocus    = FocusNode();
   final FocusNode _passwordFocus = FocusNode();
+
+  // ← NEW: our DatabaseService instance
+  final DatabaseService _dbService = DatabaseService();
 
   late final AnimationController _animController;
   late final Animation<double> _headerFade;
@@ -27,7 +31,7 @@ class _DeleteAccountPageState extends State<DeleteAccountPage>
   late final Animation<double> _passwordFade;
   late final Animation<double> _buttonFade;
 
-  bool _isLoading = false;
+  bool _isLoading    = false;
   String _errorMessage = '';
 
   @override
@@ -109,20 +113,35 @@ class _DeleteAccountPageState extends State<DeleteAccountPage>
     if (confirmed != true) return;
 
     setState(() {
-      _isLoading = true;
+      _isLoading    = true;
       _errorMessage = '';
     });
+
     try {
+      // 1️⃣ Remove profile data from Realtime Database
+      final user = FirebaseAuth.instance.currentUser;
+      final uid  = user?.uid;
+      if (uid != null) {
+        await _dbService.delete(path: 'students/$uid');
+      }
+
+      // 2️⃣ Then delete their Auth account (reauth + remove)
       await authService.value.deleteAccount(
-        email: _emailController.text,
-        password: _passwordController.text,
+        email:    _emailController.text.trim(),
+        password: _passwordController.text.trim(),
       );
+
+      // 3️⃣ Back to Welcome
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const WelcomePage()),
             (route) => false,
       );
     } on FirebaseAuthException catch (e) {
       setState(() => _errorMessage = e.message ?? 'Error occurred');
+    } catch (e) {
+      // could be DB error, etc.
+      setState(() => _errorMessage = 'Could not complete deletion. Please try again.');
+      debugPrint('Deletion error: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

@@ -1,12 +1,19 @@
+// lib/HomePage.dart
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
+import 'database_service.dart';
 import 'ProfilePage.dart';
 import 'TakeAttendancePage.dart';
 import 'RecordAttendancePage.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  /// Profile map we passed from LoginPage
+  final Map<String, dynamic>? studentProfile;
+
+  const HomePage({Key? key, this.studentProfile}) : super(key: key);
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -14,7 +21,8 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage>
     with SingleTickerProviderStateMixin {
-  String? selectedCourse;
+  String? selectedCourse;  // starts null so no course is pre‐selected
+
   final List<String> courses = [
     'Transmission & Switching (NETW601)',
     'Networks Lab (NETW602)',
@@ -24,6 +32,8 @@ class _HomePageState extends State<HomePage>
     'Modeling & Simulation (NETW707)',
     'Channel Coding (COMM604)',
   ];
+
+  final DatabaseService _dbService = DatabaseService();
 
   late final AnimationController _ctrl;
   late final Animation<double> _greetAnim;
@@ -37,20 +47,11 @@ class _HomePageState extends State<HomePage>
       vsync: this,
       duration: const Duration(milliseconds: 1400),
     );
+    _greetAnim = CurvedAnimation(parent: _ctrl, curve: const Interval(0.0, 0.3));
+    _dropdownAnim = CurvedAnimation(parent: _ctrl, curve: const Interval(0.3, 0.6));
+    _buttonsAnim = CurvedAnimation(parent: _ctrl, curve: const Interval(0.6, 1.0));
 
-    _greetAnim = CurvedAnimation(
-      parent: _ctrl,
-      curve: const Interval(0.0, 0.3, curve: Curves.easeOut),
-    );
-    _dropdownAnim = CurvedAnimation(
-      parent: _ctrl,
-      curve: const Interval(0.3, 0.6, curve: Curves.easeOut),
-    );
-    _buttonsAnim = CurvedAnimation(
-      parent: _ctrl,
-      curve: const Interval(0.6, 1.0, curve: Curves.easeOut),
-    );
-
+    // Do NOT load a saved course here—leave selectedCourse as null
     _ctrl.forward();
   }
 
@@ -58,6 +59,16 @@ class _HomePageState extends State<HomePage>
   void dispose() {
     _ctrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _onCourseSelected(String course) async {
+    // optionally still persist for later sessions:
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    await _dbService.update(
+      path: 'students/$uid',
+      data: {'selectedCourse': course},
+    );
+    setState(() => selectedCourse = course);
   }
 
   Future<void> _showCoursePicker() async {
@@ -81,70 +92,56 @@ class _HomePageState extends State<HomePage>
               ),
               borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
             ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    margin: const EdgeInsets.symmetric(vertical: 12),
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.white54,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 12),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white54,
+                    borderRadius: BorderRadius.circular(2),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Text(
-                      'Select Course',
-                      style: GoogleFonts.poppins(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Select Course',
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                const Divider(color: Colors.white24),
+                const SizedBox(height: 8),
+                ...courses.map((course) {
+                  final isSelected = course == selectedCourse;
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isSelected ? Colors.white10 : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected ? Colors.white60 : Colors.transparent,
                       ),
                     ),
-                  ),
-                  const Divider(color: Colors.white24, height: 1),
-                  const SizedBox(height: 8),
-                  Column(
-                    children: courses.map((course) {
-                      final isSelected = course == selectedCourse;
-                      return AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: isSelected ? Colors.white10 : Colors.transparent,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isSelected ? Colors.white60 : Colors.transparent,
-                          ),
-                        ),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                          title: Text(
-                            course,
-                            style: GoogleFonts.openSans(
-                              color: Colors.white,
-                              fontSize: 14,
-                            ),
-                          ),
-                          trailing: isSelected
-                              ? const Icon(Icons.check_circle, color: Color(0xFF00D38C))
-                              : null,
-                          onTap: () {
-                            setState(() {
-                              selectedCourse = course;
-                            });
-                            Navigator.pop(context);
-                          },
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-              ),
+                    child: ListTile(
+                      title: Text(course,
+                          style: GoogleFonts.openSans(color: Colors.white, fontSize: 14)),
+                      trailing: isSelected
+                          ? const Icon(Icons.check_circle, color: Color(0xFF00D38C))
+                          : null,
+                      onTap: () {
+                        _onCourseSelected(course);
+                        Navigator.pop(context);
+                      },
+                    ),
+                  );
+                }).toList(),
+                const SizedBox(height: 16),
+              ],
             ),
           ),
         );
@@ -154,8 +151,10 @@ class _HomePageState extends State<HomePage>
 
   @override
   Widget build(BuildContext context) {
-    final name = FirebaseAuth.instance.currentUser?.displayName ?? 'Student';
-    final hasSelection = selectedCourse != null;
+    final name = widget.studentProfile?['name'] as String? ??
+        FirebaseAuth.instance.currentUser?.displayName ??
+        'Student';
+    final studentId = widget.studentProfile?['studentId'] as String? ?? '';
 
     return Scaffold(
       body: Container(
@@ -187,11 +186,26 @@ class _HomePageState extends State<HomePage>
                         ),
                         const SizedBox(width: 16),
                         Expanded(
-                          child: Text(
-                            'Welcome, $name',
-                            style: GoogleFonts.poppins(
-                              fontSize: 26, color: Colors.white, fontWeight: FontWeight.w600,
-                            ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Welcome, $name',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 26,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              if (studentId.isNotEmpty)
+                                Text(
+                                  'ID: $studentId',
+                                  style: GoogleFonts.openSans(
+                                    color: Colors.white70,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                         IconButton(
@@ -199,7 +213,12 @@ class _HomePageState extends State<HomePage>
                           onPressed: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (_) => const ProfilePage()),
+                              PageRouteBuilder(
+                                pageBuilder: (_, __, ___) => const ProfilePage(),
+                                transitionsBuilder: (_, anim, __, child) {
+                                  return FadeTransition(opacity: anim, child: child);
+                                },
+                              ),
                             );
                           },
                         ),
@@ -223,11 +242,9 @@ class _HomePageState extends State<HomePage>
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                         decoration: BoxDecoration(
-                          color: hasSelection ? Colors.white54 : Colors.white24,
-                          borderRadius: BorderRadius.circular(hasSelection ? 24 : 16),
-                          boxShadow: hasSelection
-                              ? [BoxShadow(color: Colors.black38, blurRadius: 10, offset: Offset(0, 6))]
-                              : [],
+                          color: selectedCourse != null ? Colors.white54 : Colors.white24,
+                          borderRadius: BorderRadius.circular(
+                              selectedCourse != null ? 24 : 16),
                         ),
                         child: Row(
                           children: [
@@ -237,15 +254,18 @@ class _HomePageState extends State<HomePage>
                               child: Text(
                                 selectedCourse ?? 'Select Course',
                                 style: GoogleFonts.openSans(
-                                  color: hasSelection ? Colors.white : Colors.white70,
+                                  color: selectedCourse != null
+                                      ? Colors.white
+                                      : Colors.white70,
                                   fontSize: 16,
                                 ),
                               ),
                             ),
                             AnimatedRotation(
-                              turns: hasSelection ? 0.5 : 0.0,
+                              turns: selectedCourse != null ? 0.5 : 0.0,
                               duration: const Duration(milliseconds: 300),
-                              child: const Icon(Icons.arrow_drop_down, color: Colors.white70),
+                              child: const Icon(Icons.arrow_drop_down,
+                                  color: Colors.white70),
                             ),
                           ],
                         ),
@@ -269,14 +289,20 @@ class _HomePageState extends State<HomePage>
                           child: ElevatedButton(
                             onPressed: selectedCourse == null
                                 ? null
-                                : () => Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const TakeAttendancePage(selectedCourse: '',)),
-                            ),
+                                : () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => TakeAttendancePage(
+                                      selectedCourse: selectedCourse!),
+                                ),
+                              );
+                            },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.white,
                               foregroundColor: const Color(0xFF046307),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16)),
                               minimumSize: const Size(double.infinity, 140),
                             ),
                             child: Column(
@@ -284,7 +310,12 @@ class _HomePageState extends State<HomePage>
                               children: [
                                 const Icon(Icons.qr_code_scanner, size: 32),
                                 const SizedBox(height: 8),
-                                Text('Scan to\nTake\nAttendance', textAlign: TextAlign.center, style: GoogleFonts.openSans(fontSize: 14, fontWeight: FontWeight.w600)),
+                                Text(
+                                  'Scan to\nTake\nAttendance',
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.openSans(
+                                      fontSize: 14, fontWeight: FontWeight.w600),
+                                ),
                               ],
                             ),
                           ),
@@ -294,14 +325,20 @@ class _HomePageState extends State<HomePage>
                           child: ElevatedButton(
                             onPressed: selectedCourse == null
                                 ? null
-                                : () => Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => RecordAttendancePage(selectedCourse: selectedCourse!)),
-                            ),
+                                : () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => RecordAttendancePage(
+                                      selectedCourse: selectedCourse!),
+                                ),
+                              );
+                            },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.white,
                               foregroundColor: const Color(0xFF046307),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16)),
                               minimumSize: const Size(double.infinity, 140),
                             ),
                             child: Column(
@@ -309,7 +346,12 @@ class _HomePageState extends State<HomePage>
                               children: [
                                 const Icon(Icons.list_alt, size: 32),
                                 const SizedBox(height: 8),
-                                Text('Record\nAttendance', textAlign: TextAlign.center, style: GoogleFonts.openSans(fontSize: 14, fontWeight: FontWeight.w600)),
+                                Text(
+                                  'Record\nAttendance',
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.openSans(
+                                      fontSize: 14, fontWeight: FontWeight.w600),
+                                ),
                               ],
                             ),
                           ),
