@@ -1,7 +1,10 @@
+// lib/RegisterPage.dart
+
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
 
 import 'database_service.dart';
 import 'auth_service.dart';
@@ -16,7 +19,18 @@ class RegisterPage extends StatefulWidget {
 
 class _RegisterPageState extends State<RegisterPage>
     with SingleTickerProviderStateMixin {
-  // Controllers & FocusNodes
+  // Your original static list of courses
+  static const List<String> coursesList = [
+    'Transmission & Switching (NETW601)',
+    'Networks Lab (NETW602)',
+    'Computer Architecture (NETW603)',
+    'Network Protocols (NETW703)',
+    'Intro to Management (MNGT601)',
+    'Modeling & Simulation (NETW707)',
+    'Channel Coding (COMM604)',
+  ];
+
+  // Controllers & FocusNodes (unchanged)
   final TextEditingController firstNameController = TextEditingController();
   final TextEditingController lastNameController  = TextEditingController();
   final TextEditingController idController        = TextEditingController();
@@ -29,10 +43,8 @@ class _RegisterPageState extends State<RegisterPage>
   final FocusNode _emailFocus     = FocusNode();
   final FocusNode _passwordFocus  = FocusNode();
 
-  // Services
   final DatabaseService _dbService = DatabaseService();
 
-  // State
   String errorMessage = '';
   bool isLoading   = false;
   bool _visible    = false;
@@ -62,14 +74,13 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Future<void> register() async {
+    // 1) Validate inputs
     if (firstNameController.text.isEmpty ||
         lastNameController.text.isEmpty  ||
         idController.text.isEmpty        ||
         emailController.text.isEmpty     ||
         passwordController.text.isEmpty) {
-      setState(() {
-        errorMessage = 'Please fill in all fields';
-      });
+      setState(() => errorMessage = 'Please fill in all fields');
       return;
     }
 
@@ -79,53 +90,68 @@ class _RegisterPageState extends State<RegisterPage>
     });
 
     try {
-      // 1. Create Auth user
+      // 2) Create the Firebase Auth user
       await authService.value.createAccount(
         email:    emailController.text.trim(),
         password: passwordController.text.trim(),
       );
 
-      // 2. Set displayName on the Firebase User
-      final user = FirebaseAuth.instance.currentUser;
-      await user?.updateDisplayName(
+      // 3) Update displayName
+      final user = FirebaseAuth.instance.currentUser!;
+      await user.updateDisplayName(
         '${firstNameController.text} ${lastNameController.text}',
       );
+      final uid = user.uid;
 
-      // 3. Write profile (including studentId) to Realtime Database
-      if (user != null) {
-        final uid = user.uid;
-        await _dbService.create(
-          path: 'students/$uid',
-          data: {
-            'name':      user.displayName,
-            'email':     user.email,
-            'studentId': idController.text.trim(),
-            'createdAt': ServerValue.timestamp,
-          },
-          generateKey: false,
+      // 4) Compute the next 12 session‐dates, skipping Thursday & Friday
+      final today = DateTime.now();
+      final sessions = <DateTime>[];
+      var cursor = today;
+      while (sessions.length < 12) {
+        if (cursor.weekday != DateTime.thursday &&
+            cursor.weekday != DateTime.friday) {
+          sessions.add(cursor);
+        }
+        cursor = cursor.add(const Duration(days: 1));
+      }
+
+      // 5) Build a nested attendance map: { course: { 'yyyy-MM-dd': {} } }
+      final attendanceMap = <String, dynamic>{
+        for (var course in coursesList)
+          course: {
+            for (var dt in sessions)
+              DateFormat('yyyy-MM-dd').format(dt): <String, dynamic>{}
+          }
+      };
+
+      // 6) Write the entire student record in one go
+      await _dbService.create(
+        path: 'students/$uid',
+        data: {
+          'name':       user.displayName,
+          'email':      user.email,
+          'studentId':  idController.text.trim(),
+          'createdAt':  ServerValue.timestamp,
+          'courses':    coursesList,
+          'attendance': attendanceMap,
+        },
+        generateKey: false,
+      );
+
+      // 7) Navigate to Home
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const HomePage()),
         );
       }
-
-      // 4. Navigate to Home
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const HomePage()),
-      );
     } on FirebaseAuthException catch (e) {
-      setState(() {
-        errorMessage = e.message ?? 'Error during registration';
-      });
+      setState(() => errorMessage = e.message ?? 'Registration error');
     } catch (e) {
-      debugPrint('Database error: $e');
-      setState(() {
-        errorMessage = 'Could not save profile. Please try again.';
-      });
+      debugPrint('DB error: $e');
+      setState(() => errorMessage = 'Could not save profile. Please try again.');
     } finally {
-      if (mounted) {
-        setState(() {
-          isLoading = false;
-        });
-      }
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
@@ -151,41 +177,31 @@ class _RegisterPageState extends State<RegisterPage>
                   left: 24, right: 24,
                 ),
                 child: ConstrainedBox(
-                  constraints:
-                  BoxConstraints(minHeight: constraints.maxHeight),
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
                   child: IntrinsicHeight(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Back arrow
+                        // ← Back arrow (unchanged)
                         Row(
                           children: [
                             IconButton(
-                              icon: const Icon(
-                                Icons.arrow_back,
-                                color: Colors.white70,
-                              ),
+                              icon: const Icon(Icons.arrow_back, color: Colors.white70),
                               onPressed: () => Navigator.pop(context),
                             ),
                           ],
                         ),
-
                         const SizedBox(height: 20),
 
-                        // Lock icon
+                        // 🔒 Lock icon
                         Container(
                           padding: const EdgeInsets.all(24),
                           decoration: BoxDecoration(
                             color: Colors.white24,
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(
-                            Icons.lock,
-                            size: 40,
-                            color: Colors.white,
-                          ),
+                          child: const Icon(Icons.lock, size: 40, color: Colors.white),
                         ),
-
                         const SizedBox(height: 24),
 
                         // Title & subtitle
@@ -193,11 +209,9 @@ class _RegisterPageState extends State<RegisterPage>
                           'Register',
                           textAlign: TextAlign.center,
                           style: GoogleFonts.poppins(
-                            textStyle: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 32,
-                              fontWeight: FontWeight.w600,
-                            ),
+                            color: Colors.white,
+                            fontSize: 32,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -209,86 +223,66 @@ class _RegisterPageState extends State<RegisterPage>
                             fontSize: 16,
                           ),
                         ),
-
                         const SizedBox(height: 32),
 
                         // First Name
                         TextField(
                           controller: firstNameController,
                           focusNode: _firstNameFocus,
-                          style: const TextStyle(color: Colors.white),
                           textInputAction: TextInputAction.next,
-                          onSubmitted: (_) =>
-                              FocusScope.of(context).requestFocus(_lastNameFocus),
+                          onSubmitted: (_) => FocusScope.of(context).requestFocus(_lastNameFocus),
+                          style: const TextStyle(color: Colors.white),
                           decoration: InputDecoration(
                             hintText: 'First Name',
-                            hintStyle:
-                            const TextStyle(color: Colors.white54),
-                            filled: true,
-                            fillColor: Colors.white24,
-                            contentPadding:
-                            const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 16),
+                            hintStyle: const TextStyle(color: Colors.white54),
+                            filled: true, fillColor: Colors.white24,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(30),
                               borderSide: BorderSide.none,
                             ),
                           ),
                         ),
-
                         const SizedBox(height: 16),
 
                         // Last Name
                         TextField(
                           controller: lastNameController,
                           focusNode: _lastNameFocus,
-                          style: const TextStyle(color: Colors.white),
                           textInputAction: TextInputAction.next,
-                          onSubmitted: (_) =>
-                              FocusScope.of(context).requestFocus(_idFocus),
+                          onSubmitted: (_) => FocusScope.of(context).requestFocus(_idFocus),
+                          style: const TextStyle(color: Colors.white),
                           decoration: InputDecoration(
                             hintText: 'Last Name',
-                            hintStyle:
-                            const TextStyle(color: Colors.white54),
-                            filled: true,
-                            fillColor: Colors.white24,
-                            contentPadding:
-                            const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 16),
+                            hintStyle: const TextStyle(color: Colors.white54),
+                            filled: true, fillColor: Colors.white24,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(30),
                               borderSide: BorderSide.none,
                             ),
                           ),
                         ),
-
                         const SizedBox(height: 16),
 
                         // Student ID
                         TextField(
                           controller: idController,
                           focusNode: _idFocus,
-                          style: const TextStyle(color: Colors.white),
-                          keyboardType: TextInputType.text,
                           textInputAction: TextInputAction.next,
-                          onSubmitted: (_) =>
-                              FocusScope.of(context).requestFocus(_emailFocus),
+                          onSubmitted: (_) => FocusScope.of(context).requestFocus(_emailFocus),
+                          style: const TextStyle(color: Colors.white),
                           decoration: InputDecoration(
                             hintText: 'Student ID',
-                            hintStyle:
-                            const TextStyle(color: Colors.white54),
-                            filled: true,
-                            fillColor: Colors.white24,
-                            contentPadding:
-                            const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 16),
+                            hintStyle: const TextStyle(color: Colors.white54),
+                            filled: true, fillColor: Colors.white24,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(30),
                               borderSide: BorderSide.none,
                             ),
                           ),
                         ),
-
                         const SizedBox(height: 16),
 
                         // Email
@@ -296,27 +290,20 @@ class _RegisterPageState extends State<RegisterPage>
                           controller: emailController,
                           focusNode: _emailFocus,
                           keyboardType: TextInputType.emailAddress,
-                          style: const TextStyle(color: Colors.white),
                           textInputAction: TextInputAction.next,
-                          onSubmitted: (_) =>
-                              FocusScope.of(context)
-                                  .requestFocus(_passwordFocus),
+                          onSubmitted: (_) => FocusScope.of(context).requestFocus(_passwordFocus),
+                          style: const TextStyle(color: Colors.white),
                           decoration: InputDecoration(
                             hintText: 'Email',
-                            hintStyle:
-                            const TextStyle(color: Colors.white54),
-                            filled: true,
-                            fillColor: Colors.white24,
-                            contentPadding:
-                            const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 16),
+                            hintStyle: const TextStyle(color: Colors.white54),
+                            filled: true, fillColor: Colors.white24,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(30),
                               borderSide: BorderSide.none,
                             ),
                           ),
                         ),
-
                         const SizedBox(height: 16),
 
                         // Password
@@ -324,38 +311,29 @@ class _RegisterPageState extends State<RegisterPage>
                           controller: passwordController,
                           focusNode: _passwordFocus,
                           obscureText: true,
-                          style: const TextStyle(color: Colors.white),
                           textInputAction: TextInputAction.done,
                           onSubmitted: (_) => register(),
+                          style: const TextStyle(color: Colors.white),
                           decoration: InputDecoration(
                             hintText: 'Password',
-                            hintStyle:
-                            const TextStyle(color: Colors.white54),
-                            filled: true,
-                            fillColor: Colors.white24,
-                            contentPadding:
-                            const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 16),
+                            hintStyle: const TextStyle(color: Colors.white54),
+                            filled: true, fillColor: Colors.white24,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(30),
                               borderSide: BorderSide.none,
                             ),
                           ),
                         ),
-
                         const SizedBox(height: 10),
 
                         // Error message
                         if (errorMessage.isNotEmpty)
                           Padding(
-                            padding:
-                            const EdgeInsets.symmetric(horizontal: 12),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
                             child: Text(
                               errorMessage,
-                              style: const TextStyle(
-                                color: Colors.redAccent,
-                                fontSize: 14,
-                              ),
+                              style: const TextStyle(color: Colors.redAccent, fontSize: 14),
                               textAlign: TextAlign.center,
                             ),
                           ),
@@ -369,38 +347,22 @@ class _RegisterPageState extends State<RegisterPage>
                             onPressed: isLoading ? null : register,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.white,
-                              foregroundColor:
-                              const Color(0xFF046307),
-                              shape: RoundedRectangleBorder(
-                                borderRadius:
-                                BorderRadius.circular(30),
-                              ),
-                              padding:
-                              const EdgeInsets.symmetric(
-                                  vertical: 16),
+                              foregroundColor: const Color(0xFF046307),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
                             ),
                             child: isLoading
                                 ? SizedBox(
                               width: 24,
                               height: 24,
-                              child:
-                              CircularProgressIndicator(
+                              child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor:
-                                AlwaysStoppedAnimation<
-                                    Color>(
-                                  const Color(
-                                      0xFF046307),
-                                ),
+                                valueColor: AlwaysStoppedAnimation(const Color(0xFF046307)),
                               ),
                             )
                                 : Text(
                               'Register',
-                              style: GoogleFonts.openSans(
-                                fontSize: 16,
-                                fontWeight:
-                                FontWeight.w600,
-                              ),
+                              style: GoogleFonts.openSans(fontSize: 16, fontWeight: FontWeight.w600),
                             ),
                           ),
                         ),

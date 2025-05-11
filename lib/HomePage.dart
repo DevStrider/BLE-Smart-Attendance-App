@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-import 'database_service.dart';
 import 'ProfilePage.dart';
 import 'TakeAttendancePage.dart';
 import 'RecordAttendancePage.dart';
@@ -33,8 +32,6 @@ class _HomePageState extends State<HomePage>
     'Channel Coding (COMM604)',
   ];
 
-  final DatabaseService _dbService = DatabaseService();
-
   late final AnimationController _ctrl;
   late final Animation<double> _greetAnim;
   late final Animation<double> _dropdownAnim;
@@ -50,8 +47,6 @@ class _HomePageState extends State<HomePage>
     _greetAnim = CurvedAnimation(parent: _ctrl, curve: const Interval(0.0, 0.3));
     _dropdownAnim = CurvedAnimation(parent: _ctrl, curve: const Interval(0.3, 0.6));
     _buttonsAnim = CurvedAnimation(parent: _ctrl, curve: const Interval(0.6, 1.0));
-
-    // Do NOT load a saved course here—leave selectedCourse as null
     _ctrl.forward();
   }
 
@@ -59,16 +54,6 @@ class _HomePageState extends State<HomePage>
   void dispose() {
     _ctrl.dispose();
     super.dispose();
-  }
-
-  Future<void> _onCourseSelected(String course) async {
-    // optionally still persist for later sessions:
-    final uid = FirebaseAuth.instance.currentUser!.uid;
-    await _dbService.update(
-      path: 'students/$uid',
-      data: {'selectedCourse': course},
-    );
-    setState(() => selectedCourse = course);
   }
 
   Future<void> _showCoursePicker() async {
@@ -82,7 +67,9 @@ class _HomePageState extends State<HomePage>
       ),
       builder: (context) {
         return Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom
+          ),
           child: Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -134,7 +121,9 @@ class _HomePageState extends State<HomePage>
                           ? const Icon(Icons.check_circle, color: Color(0xFF00D38C))
                           : null,
                       onTap: () {
-                        _onCourseSelected(course);
+                        setState(() {
+                          selectedCourse = course;
+                        });
                         Navigator.pop(context);
                       },
                     ),
