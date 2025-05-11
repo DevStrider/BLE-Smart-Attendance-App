@@ -3,7 +3,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'database_service.dart';
 
-/// Holds one session’s date, time, and this student’s status
 class SessionRecord {
   final String date;
   final String time;

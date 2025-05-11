@@ -1,5 +1,3 @@
-// lib/RegisterPage.dart
-
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -19,7 +17,7 @@ class RegisterPage extends StatefulWidget {
 
 class _RegisterPageState extends State<RegisterPage>
     with SingleTickerProviderStateMixin {
-  // Your original static list of courses
+  // ← unchanged
   static const List<String> coursesList = [
     'Transmission & Switching (NETW601)',
     'Networks Lab (NETW602)',
@@ -30,7 +28,6 @@ class _RegisterPageState extends State<RegisterPage>
     'Channel Coding (COMM604)',
   ];
 
-  // Controllers & FocusNodes (unchanged)
   final TextEditingController firstNameController = TextEditingController();
   final TextEditingController lastNameController  = TextEditingController();
   final TextEditingController idController        = TextEditingController();
@@ -52,7 +49,7 @@ class _RegisterPageState extends State<RegisterPage>
   @override
   void initState() {
     super.initState();
-    // Fade in the form
+    // Fade in
     Future.delayed(const Duration(milliseconds: 300), () {
       setState(() => _visible = true);
     });
@@ -74,7 +71,7 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Future<void> register() async {
-    // 1) Validate inputs
+    // 1) field validation
     if (firstNameController.text.isEmpty ||
         lastNameController.text.isEmpty  ||
         idController.text.isEmpty        ||
@@ -90,23 +87,23 @@ class _RegisterPageState extends State<RegisterPage>
     });
 
     try {
-      // 2) Create the Firebase Auth user
+      // 2) create auth user
       await authService.value.createAccount(
         email:    emailController.text.trim(),
         password: passwordController.text.trim(),
       );
 
-      // 3) Update displayName
+      // 3) update displayName
       final user = FirebaseAuth.instance.currentUser!;
       await user.updateDisplayName(
         '${firstNameController.text} ${lastNameController.text}',
       );
       final uid = user.uid;
 
-      // 4) Compute the next 12 session‐dates, skipping Thursday & Friday
-      final today = DateTime.now();
+      // 4) build next-12 session dates, skipping Thu/Fri
+      final today    = DateTime.now();
       final sessions = <DateTime>[];
-      var cursor = today;
+      var   cursor   = today;
       while (sessions.length < 12) {
         if (cursor.weekday != DateTime.thursday &&
             cursor.weekday != DateTime.friday) {
@@ -115,16 +112,16 @@ class _RegisterPageState extends State<RegisterPage>
         cursor = cursor.add(const Duration(days: 1));
       }
 
-      // 5) Build a nested attendance map: { course: { 'yyyy-MM-dd': {} } }
+      // 5) attendance map with a boolean “false” placeholder per date
       final attendanceMap = <String, dynamic>{
         for (var course in coursesList)
           course: {
             for (var dt in sessions)
-              DateFormat('yyyy-MM-dd').format(dt): <String, dynamic>{}
+              DateFormat('dd-mm-yyyy').format(dt): false,
           }
       };
 
-      // 6) Write the entire student record in one go
+      // 6) ⚡️ Atomic write of everything in one shot
       await _dbService.create(
         path: 'students/$uid',
         data: {
@@ -132,13 +129,12 @@ class _RegisterPageState extends State<RegisterPage>
           'email':      user.email,
           'studentId':  idController.text.trim(),
           'createdAt':  ServerValue.timestamp,
-          'courses':    coursesList,
           'attendance': attendanceMap,
         },
         generateKey: false,
       );
 
-      // 7) Navigate to Home
+      // 7) go home
       if (mounted) {
         Navigator.pushReplacement(
           context,
@@ -182,7 +178,7 @@ class _RegisterPageState extends State<RegisterPage>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // ← Back arrow (unchanged)
+                        // ← your unchanged back-arrow, lock icon, texts, fields…
                         Row(
                           children: [
                             IconButton(
@@ -192,8 +188,6 @@ class _RegisterPageState extends State<RegisterPage>
                           ],
                         ),
                         const SizedBox(height: 20),
-
-                        // 🔒 Lock icon
                         Container(
                           padding: const EdgeInsets.all(24),
                           decoration: BoxDecoration(
@@ -203,29 +197,21 @@ class _RegisterPageState extends State<RegisterPage>
                           child: const Icon(Icons.lock, size: 40, color: Colors.white),
                         ),
                         const SizedBox(height: 24),
-
-                        // Title & subtitle
-                        Text(
-                          'Register',
+                        Text('Register',
                           textAlign: TextAlign.center,
                           style: GoogleFonts.poppins(
-                            color: Colors.white,
-                            fontSize: 32,
-                            fontWeight: FontWeight.w600,
+                            color: Colors.white, fontSize: 32, fontWeight: FontWeight.w600,
                           ),
                         ),
                         const SizedBox(height: 8),
-                        Text(
-                          'Create your account',
+                        Text('Create your account',
                           textAlign: TextAlign.center,
                           style: GoogleFonts.openSans(
-                            color: Colors.white70,
-                            fontSize: 16,
+                            color: Colors.white70, fontSize: 16,
                           ),
                         ),
                         const SizedBox(height: 32),
 
-                        // First Name
                         TextField(
                           controller: firstNameController,
                           focusNode: _firstNameFocus,
@@ -245,7 +231,6 @@ class _RegisterPageState extends State<RegisterPage>
                         ),
                         const SizedBox(height: 16),
 
-                        // Last Name
                         TextField(
                           controller: lastNameController,
                           focusNode: _lastNameFocus,
@@ -265,7 +250,6 @@ class _RegisterPageState extends State<RegisterPage>
                         ),
                         const SizedBox(height: 16),
 
-                        // Student ID
                         TextField(
                           controller: idController,
                           focusNode: _idFocus,
@@ -285,7 +269,6 @@ class _RegisterPageState extends State<RegisterPage>
                         ),
                         const SizedBox(height: 16),
 
-                        // Email
                         TextField(
                           controller: emailController,
                           focusNode: _emailFocus,
@@ -306,7 +289,6 @@ class _RegisterPageState extends State<RegisterPage>
                         ),
                         const SizedBox(height: 16),
 
-                        // Password
                         TextField(
                           controller: passwordController,
                           focusNode: _passwordFocus,
@@ -327,7 +309,6 @@ class _RegisterPageState extends State<RegisterPage>
                         ),
                         const SizedBox(height: 10),
 
-                        // Error message
                         if (errorMessage.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -340,7 +321,6 @@ class _RegisterPageState extends State<RegisterPage>
 
                         const Spacer(),
 
-                        // Register button
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
