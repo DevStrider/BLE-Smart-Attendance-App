@@ -23,14 +23,21 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
   final DatabaseService _db = DatabaseService();
 
   bool _isScanning = false;
-  bool _found      = false;
+  bool _found = false;
   ScanResult? _result;
   StreamSubscription<List<ScanResult>>? _scanSub;
   final Map<String, DeviceBlip> _blips = {};
   Set<String> _allowedMacs = {};
 
   late AnimationController _pulseCtrl;
-  late Animation<double>   _pulseAnim;
+  late Animation<double> _pulseAnim;
+
+  // New variables for connection tracking
+  DateTime? _connectionStartTime;
+  Timer? _connectionTimer;
+  bool _isConnected = false;
+  bool _attendanceMarked = false;
+  int _remainingSeconds = 120;
 
   @override
   void initState() {
@@ -58,7 +65,7 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
     final allowed = <String>{};
     data.forEach((_, def) {
       final courses = List<String>.from(def['courses']);
-      final mac     = (def['mac'] as String).toUpperCase();
+      final mac = (def['mac'] as String).toUpperCase();
       if (courses.contains(widget.selectedCourse)) {
         allowed.add(mac);
       }
@@ -76,7 +83,7 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
     );
     if (snapshot == null) return;
 
-    final today   = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final today = DateFormat('dd-MM-yyyy').format(DateTime.now());
     snapshot.forEach((dateKey, val) {
       if (dateKey.compareTo(today) < 0) {
         final entry = val as Map;
@@ -96,13 +103,6 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
     await Permission.locationWhenInUse.request();
   }
 
-  @override
-  void dispose() {
-    _scanSub?.cancel();
-    _pulseCtrl.dispose();
-    super.dispose();
-  }
-
   Future<void> _startScan() async {
     if (_allowedMacs.isEmpty) {
       _showNoBeaconDialog();
@@ -111,28 +111,51 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
 
     setState(() {
       _isScanning = true;
-      _found      = false;
+      _found = false;
+      _isConnected = false;
+      _attendanceMarked = false;
+      _connectionStartTime = null;
+      _remainingSeconds = 120;
       _blips.clear();
     });
 
-    _scanSub = FlutterBluePlus.scanResults.listen((results) {
+    _scanSub = FlutterBluePlus.scanResults.listen((results) async {
       for (var r in results) {
         final id = r.device.id.toString().toUpperCase();
         if (!_blips.containsKey(id)) {
-          final rng   = Random(id.hashCode);
+          final rng = Random(id.hashCode);
           final angle = rng.nextDouble() * 2 * pi;
-          final dist  = pow(10, (-59 - r.rssi) / 20).toDouble();
-          final norm  = (dist > 10.0) ? 1.0 : dist / 10.0;
-          _blips[id]  = DeviceBlip(angle, norm);
+          final dist = pow(10, (-59 - r.rssi) / 20).toDouble();
+          final norm = (dist > 10.0) ? 1.0 : dist / 10.0;
+          _blips[id] = DeviceBlip(angle, norm);
         }
+
         if (_allowedMacs.contains(id)) {
-          _stopScan();
-          setState(() {
-            _found  = true;
-            _result = r;
-          });
-          _writeAttendance(r);
-          _showResultDialog();
+          if (!_isConnected) {
+            // First time connecting to this beacon
+            setState(() {
+              _isConnected = true;
+              _found = true;
+              _result = r;
+              _connectionStartTime = DateTime.now();
+            });
+
+            // Start the 2-minute countdown
+            _connectionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+              if (mounted) {
+                setState(() {
+                  _remainingSeconds = 120 - timer.tick;
+                });
+
+                if (_remainingSeconds <= 0) {
+                  timer.cancel();
+                  _writeAttendance(r);
+                  setState(() => _attendanceMarked = true);
+                  _showResultDialog();
+                }
+              }
+            });
+          }
           break;
         }
       }
@@ -143,26 +166,34 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
   }
 
   void _stopScan() {
+    _connectionTimer?.cancel();
     FlutterBluePlus.stopScan();
     _scanSub?.cancel();
-    setState(() => _isScanning = false);
+    setState(() {
+      _isScanning = false;
+      _isConnected = false;
+      _connectionStartTime = null;
+    });
   }
 
   Future<void> _writeAttendance(ScanResult r) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-    final uid     = user.uid;
-    final now     = DateTime.now();
-    final dateKey = DateFormat('yyyy-MM-dd').format(now);
-    final ms      = now.millisecondsSinceEpoch;
-    final dist    = pow(10, (-59 - r.rssi) / 20).toDouble();
-    final status  = dist <= 2.0 ? 'attended' : 'absent';
+
+    final uid = user.uid;
+    final now = DateTime.now();
+    final dateKey = DateFormat('dd-MM-yyyy').format(now);
+    final timeKey = DateFormat('hh:mm:ss a').format(now); // Add time formatting
+    final ms = now.millisecondsSinceEpoch;
+    final dist = pow(10, (-59 - r.rssi) / 20).toDouble();
 
     await _db.update(
       path: 'students/$uid/attendance/${widget.selectedCourse}/$dateKey',
       data: {
-        'status':    status,
+        'status': dist <= 2.0 ? 'attended' : 'absent',
         'timestamp': ms,
+        'time': timeKey, // Add time field
+        'connection_duration': 120 - _remainingSeconds,
       },
     );
   }
@@ -172,8 +203,7 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.card,
-        shape:
-        RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('No Beacon Configured',
             style: GoogleFonts.poppins(
                 color: AppColors.textPrimary,
@@ -194,9 +224,12 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
   }
 
   void _showResultDialog() {
-    final r    = _result!;
+    final r = _result!;
     final dist = pow(10, (-59 - r.rssi) / 20).toStringAsFixed(2);
     final time = DateFormat('hh:mm:ss a').format(DateTime.now());
+    final duration = _connectionStartTime != null
+        ? DateTime.now().difference(_connectionStartTime!).inSeconds
+        : 0;
 
     showGeneralDialog(
       context: context,
@@ -217,33 +250,54 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('Attendance Details',
-                    style: GoogleFonts.poppins(
-                        color: AppColors.textPrimary,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold)),
+                Text(
+                  _attendanceMarked ? 'Attendance Recorded!' : 'Connected to Beacon',
+                  style: GoogleFonts.poppins(
+                      color: AppColors.textPrimary,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold
+                  ),
+                ),
                 const SizedBox(height: 16),
                 _row('Course', widget.selectedCourse),
                 _row('Device', r.device.id.toString()),
                 _row('Signal', '${r.rssi} dBm'),
                 _row('Distance', '$dist m'),
-                _row('Time', time),
+                _row('Connected Time', '$duration seconds'),
+                if (!_attendanceMarked) ...[
+                  const SizedBox(height: 8),
+                  LinearProgressIndicator(
+                    value: 1 - (_remainingSeconds / 120),
+                    backgroundColor: Colors.white12,
+                    valueColor: const AlwaysStoppedAnimation(AppColors.beam),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Remaining: $_remainingSeconds seconds',
+                    style: GoogleFonts.openSans(color: Colors.white70),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 ElevatedButton(
                   onPressed: () {
                     Navigator.pop(ctx);
-                    setState(() => _found = false);
+                    _stopScan();
                     _startScan();
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.beam,
                     minimumSize: const Size.fromHeight(48),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30)),
+                      borderRadius: BorderRadius.circular(30),
+                    ),
                   ),
-                  child: Text('Scan Again',
-                      style: GoogleFonts.openSans(
-                          color: Colors.black, fontSize: 16)),
+                  child: Text(
+                    _attendanceMarked ? 'Scan Again' : 'Cancel',
+                    style: GoogleFonts.openSans(
+                        color: Colors.black,
+                        fontSize: 16
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -253,8 +307,7 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
       transitionBuilder: (ctx, a1, a2, child) => FadeTransition(
         opacity: a1,
         child: ScaleTransition(
-          scale:
-          CurvedAnimation(parent: a1, curve: Curves.easeOutBack),
+          scale: CurvedAnimation(parent: a1, curve: Curves.easeOutBack),
           child: child,
         ),
       ),
@@ -272,11 +325,18 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
         const SizedBox(width: 12),
         Expanded(
             child: Text(value,
-                style:
-                const TextStyle(color: AppColors.textPrimary))),
+                style: const TextStyle(color: AppColors.textPrimary))),
       ],
     ),
   );
+
+  @override
+  void dispose() {
+    _scanSub?.cancel();
+    _connectionTimer?.cancel();
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -316,9 +376,15 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
                     ),
                     child: Center(
                       child: Icon(
-                        _found ? Icons.check_circle : Icons.wifi_tethering,
+                        _attendanceMarked
+                            ? Icons.check_circle
+                            : _isConnected
+                            ? Icons.bluetooth_connected
+                            : Icons.wifi_tethering,
                         size: 60,
-                        color: _found ? AppColors.beam : AppColors.textPrimary,
+                        color: _attendanceMarked
+                            ? AppColors.beam
+                            : AppColors.textPrimary,
                       ),
                     ),
                   ),
@@ -326,10 +392,34 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
               ),
               const SizedBox(height: 16),
               Text(
-                _found ? 'Beacon Found!' : 'Scanning for Beacons…',
-                style:
-                GoogleFonts.poppins(color: Colors.white, fontSize: 20),
+                _attendanceMarked
+                    ? 'Attendance Recorded!'
+                    : _isConnected
+                    ? 'Connected to Beacon...'
+                    : 'Scanning for Beacons...',
+                style: GoogleFonts.poppins(color: Colors.white, fontSize: 20),
               ),
+              if (_isConnected && !_attendanceMarked) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Please stay connected for 2 minutes',
+                  style: GoogleFonts.openSans(color: Colors.white70),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: 200,
+                  child: LinearProgressIndicator(
+                    value: 1 - (_remainingSeconds / 120),
+                    backgroundColor: Colors.white12,
+                    valueColor: const AlwaysStoppedAnimation(AppColors.beam),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '$_remainingSeconds seconds remaining',
+                  style: GoogleFonts.openSans(color: Colors.white70),
+                ),
+              ],
               const SizedBox(height: 24),
               if (!_found)
                 SizedBox(
@@ -371,8 +461,7 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
                 ),
               const Spacer(),
               Padding(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
                 child: ElevatedButton.icon(
                   onPressed: _isScanning ? _stopScan : _startScan,
                   icon: Icon(_isScanning ? Icons.stop : Icons.search),
@@ -403,9 +492,9 @@ class DeviceBlip {
 
 class AppColors {
   static const backgroundStart = Color(0xFF004D43);
-  static const backgroundEnd   = Color(0xFF046307);
-  static const card            = Color(0xFF1E1E1E);
-  static const beam            = Color(0xFF00D38C);
-  static const textPrimary     = Colors.white;
-  static const textSecondary   = Colors.white70;
+  static const backgroundEnd = Color(0xFF046307);
+  static const card = Color(0xFF1E1E1E);
+  static const beam = Color(0xFF00D38C);
+  static const textPrimary = Colors.white;
+  static const textSecondary = Colors.white70;
 }

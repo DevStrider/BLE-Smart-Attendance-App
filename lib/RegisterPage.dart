@@ -15,9 +15,7 @@ class RegisterPage extends StatefulWidget {
   State<RegisterPage> createState() => _RegisterPageState();
 }
 
-class _RegisterPageState extends State<RegisterPage>
-    with SingleTickerProviderStateMixin {
-  // ← unchanged
+class _RegisterPageState extends State<RegisterPage> with SingleTickerProviderStateMixin {
   static const List<String> coursesList = [
     'Transmission & Switching (NETW601)',
     'Networks Lab (NETW602)',
@@ -29,22 +27,22 @@ class _RegisterPageState extends State<RegisterPage>
   ];
 
   final TextEditingController firstNameController = TextEditingController();
-  final TextEditingController lastNameController  = TextEditingController();
-  final TextEditingController idController        = TextEditingController();
-  final TextEditingController emailController     = TextEditingController();
-  final TextEditingController passwordController  = TextEditingController();
+  final TextEditingController lastNameController = TextEditingController();
+  final TextEditingController idController = TextEditingController();
+  final TextEditingController emailController = TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
 
   final FocusNode _firstNameFocus = FocusNode();
-  final FocusNode _lastNameFocus  = FocusNode();
-  final FocusNode _idFocus        = FocusNode();
-  final FocusNode _emailFocus     = FocusNode();
-  final FocusNode _passwordFocus  = FocusNode();
+  final FocusNode _lastNameFocus = FocusNode();
+  final FocusNode _idFocus = FocusNode();
+  final FocusNode _emailFocus = FocusNode();
+  final FocusNode _passwordFocus = FocusNode();
 
   final DatabaseService _dbService = DatabaseService();
 
   String errorMessage = '';
-  bool isLoading   = false;
-  bool _visible    = false;
+  bool isLoading = false;
+  bool _visible = false;
 
   @override
   void initState() {
@@ -71,11 +69,11 @@ class _RegisterPageState extends State<RegisterPage>
   }
 
   Future<void> register() async {
-    // 1) field validation
+    // 1) Field validation
     if (firstNameController.text.isEmpty ||
-        lastNameController.text.isEmpty  ||
-        idController.text.isEmpty        ||
-        emailController.text.isEmpty     ||
+        lastNameController.text.isEmpty ||
+        idController.text.isEmpty ||
+        emailController.text.isEmpty ||
         passwordController.text.isEmpty) {
       setState(() => errorMessage = 'Please fill in all fields');
       return;
@@ -83,27 +81,27 @@ class _RegisterPageState extends State<RegisterPage>
 
     setState(() {
       errorMessage = '';
-      isLoading    = true;
+      isLoading = true;
     });
 
     try {
-      // 2) create auth user
+      // 2) Create auth user
       await authService.value.createAccount(
-        email:    emailController.text.trim(),
+        email: emailController.text.trim(),
         password: passwordController.text.trim(),
       );
 
-      // 3) update displayName
+      // 3) Update displayName
       final user = FirebaseAuth.instance.currentUser!;
       await user.updateDisplayName(
         '${firstNameController.text} ${lastNameController.text}',
       );
       final uid = user.uid;
 
-      // 4) build next-12 session dates, skipping Thu/Fri
-      final today    = DateTime.now();
+      // 4) Build next-12 session dates, skipping Thu/Fri
+      final today = DateTime.now();
       final sessions = <DateTime>[];
-      var   cursor   = today;
+      var cursor = today;
       while (sessions.length < 12) {
         if (cursor.weekday != DateTime.thursday &&
             cursor.weekday != DateTime.friday) {
@@ -112,12 +110,15 @@ class _RegisterPageState extends State<RegisterPage>
         cursor = cursor.add(const Duration(days: 1));
       }
 
-      // 5) attendance map with a boolean “false” placeholder per date
+      // 5) Attendance map with a boolean “false” placeholder per date and time
       final attendanceMap = <String, dynamic>{
         for (var course in coursesList)
           course: {
             for (var dt in sessions)
-              DateFormat('dd-mm-yyyy').format(dt): false,
+              DateFormat('dd-MM-yyyy').format(dt): {
+                'status': false,
+                'time': '00:00', // Placeholder time, will be updated later
+              }
           }
       };
 
@@ -125,16 +126,16 @@ class _RegisterPageState extends State<RegisterPage>
       await _dbService.create(
         path: 'students/$uid',
         data: {
-          'name':       user.displayName,
-          'email':      user.email,
-          'studentId':  idController.text.trim(),
-          'createdAt':  ServerValue.timestamp,
+          'name': user.displayName,
+          'email': user.email,
+          'studentId': idController.text.trim(),
+          'createdAt': ServerValue.timestamp,
           'attendance': attendanceMap,
         },
         generateKey: false,
       );
 
-      // 7) go home
+      // 7) Go home
       if (mounted) {
         Navigator.pushReplacement(
           context,
@@ -178,7 +179,6 @@ class _RegisterPageState extends State<RegisterPage>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // ← your unchanged back-arrow, lock icon, texts, fields…
                         Row(
                           children: [
                             IconButton(
@@ -212,6 +212,7 @@ class _RegisterPageState extends State<RegisterPage>
                         ),
                         const SizedBox(height: 32),
 
+                        // Your input fields for first name, last name, etc.
                         TextField(
                           controller: firstNameController,
                           focusNode: _firstNameFocus,
