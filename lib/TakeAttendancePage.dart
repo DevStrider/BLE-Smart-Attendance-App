@@ -58,17 +58,44 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
     });
   }
 
+  /// Extracts just the 4-letter+3-digit code, lowercased, e.g. "netw703"
+  String _onlyCode(String full) {
+    final match = RegExp(r"\b[A-Z]{4}\d{3}\b").firstMatch(full);
+    return match != null ? match.group(0)!.toLowerCase() : full.toLowerCase();
+  }
+
+  /// Normalize MAC addresses: uppercase + colon-separated
+  String _normalizeMac(String mac) =>
+      mac.toUpperCase().replaceAll('-', ':').trim();
+
   Future<void> _loadBeacons() async {
     final data = await _db.read(path: 'beacons');
+    debugPrint("🔍 raw RTDB data: $data");
     if (data == null) return;
+
+    // Log what selectedCourse is
+    debugPrint("🎯 selectedCourse = '${widget.selectedCourse}'");
+    final selectedCode = _onlyCode(widget.selectedCourse);
+    debugPrint("   -> selectedCode = '$selectedCode'");
+
     final allowed = <String>{};
-    data.forEach((_, def) {
-      final courses = List<String>.from(def['courses']);
-      final mac = (def['mac'] as String).toUpperCase();
-      if (courses.contains(widget.selectedCourse)) {
-        allowed.add(mac);
+    data.forEach((key, def) {
+      final rawMac = def['mac'] as String? ?? '';
+      final mac = _normalizeMac(rawMac);
+      final courses = (def['courses'] as List).cast<String>();
+      debugPrint("– beacon[$key] mac=$mac courses=$courses");
+
+      for (var c in courses) {
+        final code = _onlyCode(c);
+        if (code == selectedCode) {
+          debugPrint("   ✔️ matched “$c” (code='$code')");
+          allowed.add(mac);
+          break;
+        }
       }
     });
+
+    debugPrint("✅ _allowedMacs = $allowed");
     setState(() => _allowedMacs = allowed);
   }
 
@@ -119,14 +146,12 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
       _blips.clear();
     });
 
-    // Listen continuously to scan results
     _scanSub = FlutterBluePlus.scanResults.listen((results) {
       bool beaconInRange = false;
       ScanResult? current;
 
-      // Check for any allowed beacon
       for (var r in results) {
-        final id = r.device.id.toString().toUpperCase();
+        final id = _normalizeMac(r.device.id.toString());
         if (!_blips.containsKey(id)) {
           final rng = Random(id.hashCode);
           final angle = rng.nextDouble() * 2 * pi;
@@ -151,11 +176,9 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
           });
           _startConnectionTimer();
         } else {
-          // Update RSSI/result for UI
           _result = current;
         }
       } else {
-        // Lost beacon before full duration: reset timer
         if (_isConnected && !_attendanceMarked) {
           _connectionTimer?.cancel();
           setState(() {
@@ -166,10 +189,9 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
         }
       }
 
-      setState(() {}); // refresh UI
+      setState(() {});
     });
 
-    // Start scanning indefinitely until stopped
     await FlutterBluePlus.startScan();
   }
 
@@ -210,7 +232,6 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
     final dateKey = DateFormat('dd-MM-yyyy').format(now);
     final timeKey = DateFormat('HH:mm:ss').format(now);
 
-    // Write only status=true and time=<attendance time>
     await _db.update(
       path: 'students/$uid/attendance/${widget.selectedCourse}/$dateKey',
       data: {
@@ -233,8 +254,7 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
                 fontWeight: FontWeight.bold)),
         content: Text(
           'No beacons are associated with "${widget.selectedCourse}".',
-          style:
-          GoogleFonts.openSans(color: AppColors.textSecondary),
+          style: GoogleFonts.openSans(color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
@@ -249,12 +269,9 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
 
   void _showResultDialog() {
     final r = _result!;
-    final dist =
-    pow(10, (-59 - r.rssi) / 20).toStringAsFixed(2);
+    final dist = pow(10, (-59 - r.rssi) / 20).toStringAsFixed(2);
     final duration = _connectionStartTime != null
-        ? DateTime.now()
-        .difference(_connectionStartTime!)
-        .inSeconds
+        ? DateTime.now().difference(_connectionStartTime!).inSeconds
         : 0;
     final nowTime = DateFormat('HH:mm:ss').format(DateTime.now());
 
@@ -439,8 +456,8 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
                 const SizedBox(height: 8),
                 Text(
                   'Please stay connected for 2 minutes',
-                  style:
-                  GoogleFonts.openSans(color: Colors.white70),
+                  style: GoogleFonts.openSans(
+                      color: Colors.white70),
                 ),
                 const SizedBox(height: 8),
                 SizedBox(
@@ -455,8 +472,8 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
                 const SizedBox(height: 8),
                 Text(
                   '$_remainingSeconds seconds remaining',
-                  style:
-                  GoogleFonts.openSans(color: Colors.white70),
+                  style: GoogleFonts.openSans(
+                      color: Colors.white70),
                 ),
               ],
               const SizedBox(height: 24),
@@ -472,8 +489,8 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
                       (1 - e.value.distNorm).clamp(0.0, 1.0);
                       return Container(
                         width: w * 0.4,
-                        margin:
-                        const EdgeInsets.symmetric(horizontal: 8),
+                        margin: const EdgeInsets.symmetric(
+                            horizontal: 8),
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: AppColors.card,
@@ -501,7 +518,8 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
                             const SizedBox(height: 4),
                             Text('${(percent * 100).toInt()}%',
                                 style: const TextStyle(
-                                    color: Colors.white70,
+                                    color:
+                                    Colors.white70,
                                     fontSize: 12)),
                           ],
                         ),
@@ -525,8 +543,7 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
                     backgroundColor: AppColors.card,
                     foregroundColor:
                     AppColors.textPrimary,
-                    minimumSize:
-                    const Size.fromHeight(56),
+                    minimumSize: const Size.fromHeight(56),
                     shape: RoundedRectangleBorder(
                         borderRadius:
                         BorderRadius.circular(30)),
