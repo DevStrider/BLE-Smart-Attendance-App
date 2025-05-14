@@ -117,7 +117,8 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
           _db.update(
             path:
             'students/$uid/attendance/${widget.selectedCourse}/$dateKey',
-            data: {'status': 'absent'},
+            data: {'status': false,
+            },
           );
         }
       }
@@ -241,6 +242,27 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
     );
   }
 
+  Future<void> _deleteAttendance() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final uid = user.uid;
+
+    final now = DateTime.now();
+    final dateKey = DateFormat('dd-MM-yyyy').format(now);
+
+    await _db.update(
+      path: 'students/$uid/attendance/${widget.selectedCourse}/$dateKey',
+      data: {
+        'status': false,
+        'time': '00:00',
+      },
+    );
+
+    setState(() {
+      _attendanceMarked = false;
+    });
+  }
+
   void _showNoBeaconDialog() {
     showDialog(
       context: context,
@@ -326,25 +348,47 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
                   ),
                 ],
                 const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    _stopScan();
-                    _startScan();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.beam,
-                    minimumSize: const Size.fromHeight(48),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
+                if (_attendanceMarked)
+                  ElevatedButton(
+                    onPressed: () async {
+                      await _deleteAttendance();
+                      Navigator.pop(ctx);
+                      _stopScan();
+                      _startScan();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red[800],
+                      minimumSize: const Size.fromHeight(48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                    ),
+                    child: Text(
+                      'Delete Attendance',
+                      style: GoogleFonts.openSans(
+                          color: Colors.white, fontSize: 16),
                     ),
                   ),
-                  child: Text(
-                    _attendanceMarked ? 'Scan Again' : 'Cancel',
-                    style: GoogleFonts.openSans(
-                        color: Colors.black, fontSize: 16),
+                if (!_attendanceMarked)
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _stopScan();
+                      _startScan();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.beam,
+                      minimumSize: const Size.fromHeight(48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                    ),
+                    child: Text(
+                      'Cancel',
+                      style: GoogleFonts.openSans(
+                          color: Colors.black, fontSize: 16),
+                    ),
                   ),
-                ),
               ],
             ),
           ),
