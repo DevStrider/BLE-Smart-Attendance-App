@@ -32,22 +32,21 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
   late AnimationController _pulseCtrl;
   late Animation<double> _pulseAnim;
 
-  // Connection & attendance tracking
   DateTime? _connectionStartTime;
   Timer? _connectionTimer;
   bool _isConnected = false;
   bool _attendanceMarked = false;
   int _remainingSeconds = 120;
 
+  static const double _maxDistanceMeters = 2.0; // only within 2 m
+
   @override
   void initState() {
     super.initState();
-
     _pulseCtrl = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
-
     _pulseAnim = Tween<double>(begin: 0.6, end: 1.0).animate(
       CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
     );
@@ -58,44 +57,29 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
     });
   }
 
-  /// Extracts just the 4-letter+3-digit code, lowercased, e.g. "netw703"
   String _onlyCode(String full) {
     final match = RegExp(r"\b[A-Z]{4}\d{3}\b").firstMatch(full);
     return match != null ? match.group(0)!.toLowerCase() : full.toLowerCase();
   }
 
-  /// Normalize MAC addresses: uppercase + colon-separated
   String _normalizeMac(String mac) =>
       mac.toUpperCase().replaceAll('-', ':').trim();
 
   Future<void> _loadBeacons() async {
     final data = await _db.read(path: 'beacons');
-    debugPrint("🔍 raw RTDB data: $data");
     if (data == null) return;
-
-    // Log what selectedCourse is
-    debugPrint("🎯 selectedCourse = '${widget.selectedCourse}'");
     final selectedCode = _onlyCode(widget.selectedCourse);
-    debugPrint("   -> selectedCode = '$selectedCode'");
-
     final allowed = <String>{};
     data.forEach((key, def) {
-      final rawMac = def['mac'] as String? ?? '';
-      final mac = _normalizeMac(rawMac);
+      final mac = _normalizeMac(def['mac'] as String? ?? '');
       final courses = (def['courses'] as List).cast<String>();
-      debugPrint("– beacon[$key] mac=$mac courses=$courses");
-
       for (var c in courses) {
-        final code = _onlyCode(c);
-        if (code == selectedCode) {
-          debugPrint("   ✔️ matched “$c” (code='$code')");
+        if (_onlyCode(c) == selectedCode) {
           allowed.add(mac);
           break;
         }
       }
     });
-
-    debugPrint("✅ _allowedMacs = $allowed");
     setState(() => _allowedMacs = allowed);
   }
 
@@ -103,12 +87,10 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     final uid = user.uid;
-
     final snapshot = await _db.read(
       path: 'students/$uid/attendance/${widget.selectedCourse}',
     );
     if (snapshot == null) return;
-
     final today = DateFormat('dd-MM-yyyy').format(DateTime.now());
     snapshot.forEach((dateKey, val) {
       if (dateKey.compareTo(today) < 0) {
@@ -117,8 +99,7 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
           _db.update(
             path:
             'students/$uid/attendance/${widget.selectedCourse}/$dateKey',
-            data: {'status': false,
-            },
+            data: {'status': false},
           );
         }
       }
@@ -153,22 +134,28 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
 
       for (var r in results) {
         final id = _normalizeMac(r.device.id.toString());
+
+        // estimate distance from RSSI
+        final dist = pow(10, (-59 - r.rssi) / 20).toDouble();
+
+        // keep the little radar‐blip positions
         if (!_blips.containsKey(id)) {
           final rng = Random(id.hashCode);
           final angle = rng.nextDouble() * 2 * pi;
-          final dist = pow(10, (-59 - r.rssi) / 20).toDouble();
           final norm = (dist > 10.0) ? 1.0 : dist / 10.0;
           _blips[id] = DeviceBlip(angle, norm);
         }
-        if (_allowedMacs.contains(id)) {
+
+        // only treat as “in range” if it's an allowed MAC AND ≤ 2 m
+        if (_allowedMacs.contains(id) && dist <= _maxDistanceMeters) {
           beaconInRange = true;
           current = r;
           break;
         }
       }
 
-      if (beaconInRange && current != null) {
-        if (!_isConnected && !_attendanceMarked) {
+      if (beaconInRange && current != null && !_attendanceMarked) {
+        if (!_isConnected) {
           setState(() {
             _isConnected = true;
             _found = true;
@@ -177,17 +164,17 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
           });
           _startConnectionTimer();
         } else {
+          // keep updating the result so RSSI/time stay current
           _result = current;
         }
-      } else {
-        if (_isConnected && !_attendanceMarked) {
-          _connectionTimer?.cancel();
-          setState(() {
-            _isConnected = false;
-            _remainingSeconds = 120;
-            _connectionStartTime = null;
-          });
-        }
+      } else if (_isConnected && !_attendanceMarked) {
+        // lost valid connection or out of range → reset
+        _connectionTimer?.cancel();
+        setState(() {
+          _isConnected = false;
+          _remainingSeconds = 120;
+          _connectionStartTime = null;
+        });
       }
 
       setState(() {});
@@ -198,12 +185,9 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
 
   void _startConnectionTimer() {
     _connectionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      final tick = timer.tick;
+      final rem = 120 - timer.tick;
       if (!mounted) return;
-
-      final rem = 120 - tick;
       setState(() => _remainingSeconds = rem.clamp(0, 120));
-
       if (rem <= 0) {
         timer.cancel();
         _writeAttendance(_result!);
@@ -228,11 +212,9 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     final uid = user.uid;
-
     final now = DateTime.now();
     final dateKey = DateFormat('dd-MM-yyyy').format(now);
     final timeKey = DateFormat('HH:mm:ss').format(now);
-
     await _db.update(
       path: 'students/$uid/attendance/${widget.selectedCourse}/$dateKey',
       data: {
@@ -246,10 +228,8 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     final uid = user.uid;
-
     final now = DateTime.now();
     final dateKey = DateFormat('dd-MM-yyyy').format(now);
-
     await _db.update(
       path: 'students/$uid/attendance/${widget.selectedCourse}/$dateKey',
       data: {
@@ -257,32 +237,23 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
         'time': '00:00',
       },
     );
-
-    setState(() {
-      _attendanceMarked = false;
-    });
+    setState(() => _attendanceMarked = false);
   }
 
   void _showNoBeaconDialog() {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.card,
-        shape:
-        RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('No Beacon Configured',
-            style: GoogleFonts.poppins(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.bold)),
+            style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
         content: Text(
           'No beacons are associated with "${widget.selectedCourse}".',
-          style: GoogleFonts.openSans(color: AppColors.textSecondary),
+          style: GoogleFonts.openSans(),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: Text('OK',
-                style: GoogleFonts.openSans(color: AppColors.beam)),
+            child: Text('OK', style: GoogleFonts.openSans()),
           ),
         ],
       ),
@@ -310,7 +281,7 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
             padding: const EdgeInsets.all(24),
             width: MediaQuery.of(ctx).size.width * 0.8,
             decoration: BoxDecoration(
-              color: AppColors.card,
+              color: Colors.grey[900],
               borderRadius: BorderRadius.circular(20),
             ),
             child: Column(
@@ -321,9 +292,7 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
                       ? 'Attendance Recorded!'
                       : 'Connected to Beacon',
                   style: GoogleFonts.poppins(
-                      color: AppColors.textPrimary,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold),
+                      color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 16),
                 _row('Course', widget.selectedCourse),
@@ -337,14 +306,12 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
                   LinearProgressIndicator(
                     value: 1 - (_remainingSeconds / 120),
                     backgroundColor: Colors.white12,
-                    valueColor:
-                    const AlwaysStoppedAnimation(AppColors.beam),
+                    valueColor: AlwaysStoppedAnimation(Colors.tealAccent),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Remaining: $_remainingSeconds seconds',
-                    style:
-                    GoogleFonts.openSans(color: Colors.white70),
+                    style: GoogleFonts.openSans(color: Colors.white70),
                   ),
                 ],
                 const SizedBox(height: 24),
@@ -365,11 +332,10 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
                     ),
                     child: Text(
                       'Delete Attendance',
-                      style: GoogleFonts.openSans(
-                          color: Colors.white, fontSize: 16),
+                      style: GoogleFonts.openSans(color: Colors.white, fontSize: 16),
                     ),
-                  ),
-                if (!_attendanceMarked)
+                  )
+                else
                   ElevatedButton(
                     onPressed: () {
                       Navigator.pop(ctx);
@@ -377,7 +343,7 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
                       _startScan();
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.beam,
+                      backgroundColor: Colors.tealAccent,
                       minimumSize: const Size.fromHeight(48),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(30),
@@ -385,8 +351,7 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
                     ),
                     child: Text(
                       'Cancel',
-                      style: GoogleFonts.openSans(
-                          color: Colors.black, fontSize: 16),
+                      style: GoogleFonts.openSans(color: Colors.black, fontSize: 16),
                     ),
                   ),
               ],
@@ -397,8 +362,7 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
       transitionBuilder: (ctx, a1, a2, child) => FadeTransition(
         opacity: a1,
         child: ScaleTransition(
-          scale:
-          CurvedAnimation(parent: a1, curve: Curves.easeOutBack),
+          scale: CurvedAnimation(parent: a1, curve: Curves.easeOutBack),
           child: child,
         ),
       ),
@@ -409,15 +373,9 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
     padding: const EdgeInsets.symmetric(vertical: 6),
     child: Row(
       children: [
-        Text('$label:',
-            style: TextStyle(
-                color: AppColors.textSecondary,
-                fontWeight: FontWeight.w600)),
+        Text('$label:', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
         const SizedBox(width: 12),
-        Expanded(
-            child: Text(value,
-                style: const TextStyle(
-                    color: AppColors.textPrimary))),
+        Expanded(child: Text(value, style: TextStyle(color: Colors.white))),
       ],
     ),
   );
@@ -435,21 +393,14 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
     final w = MediaQuery.of(context).size.width * 0.8;
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: AppColors.backgroundStart,
+        backgroundColor: Colors.teal[800],
         iconTheme: const IconThemeData(color: Colors.white),
-        title: Text('Take Attendance',
-            style: GoogleFonts.poppins(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.w600)),
+        title: Text('Take Attendance', style: GoogleFonts.poppins(color: Colors.white, fontSize: 20)),
       ),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [
-              AppColors.backgroundStart,
-              AppColors.backgroundEnd
-            ],
+            colors: [Colors.teal, Colors.tealAccent],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -465,22 +416,15 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
                   child: Container(
                     width: 120,
                     height: 120,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color:
-                      AppColors.beam.withOpacity(0.3),
-                    ),
+                    decoration:
+                    BoxDecoration(shape: BoxShape.circle, color: Colors.tealAccent.withOpacity(0.3)),
                     child: Center(
                       child: Icon(
-                        _attendanceMarked
-                            ? Icons.check_circle
-                            : _isConnected
+                        _attendanceMarked ? Icons.check_circle : _isConnected
                             ? Icons.bluetooth_connected
                             : Icons.wifi_tethering,
                         size: 60,
-                        color: _attendanceMarked
-                            ? AppColors.beam
-                            : AppColors.textPrimary,
+                        color: _attendanceMarked ? Colors.tealAccent : Colors.white,
                       ),
                     ),
                   ),
@@ -491,17 +435,15 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
                 _attendanceMarked
                     ? 'Attendance Recorded!'
                     : _isConnected
-                    ? 'Connected to Beacon...'
-                    : 'Scanning for Beacons...',
-                style: GoogleFonts.poppins(
-                    color: Colors.white, fontSize: 20),
+                    ? 'Connected to Beacon…'
+                    : 'Scanning for Beacons…',
+                style: GoogleFonts.poppins(color: Colors.white, fontSize: 20),
               ),
               if (_isConnected && !_attendanceMarked) ...[
                 const SizedBox(height: 8),
                 Text(
                   'Please stay connected for 2 minutes',
-                  style: GoogleFonts.openSans(
-                      color: Colors.white70),
+                  style: GoogleFonts.openSans(color: Colors.white70),
                 ),
                 const SizedBox(height: 8),
                 SizedBox(
@@ -509,15 +451,13 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
                   child: LinearProgressIndicator(
                     value: 1 - (_remainingSeconds / 120),
                     backgroundColor: Colors.white12,
-                    valueColor:
-                    const AlwaysStoppedAnimation(AppColors.beam),
+                    valueColor: AlwaysStoppedAnimation(Colors.tealAccent),
                   ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   '$_remainingSeconds seconds remaining',
-                  style: GoogleFonts.openSans(
-                      color: Colors.white70),
+                  style: GoogleFonts.openSans(color: Colors.white70),
                 ),
               ],
               const SizedBox(height: 24),
@@ -526,45 +466,28 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
                   height: 100,
                   child: ListView(
                     scrollDirection: Axis.horizontal,
-                    padding:
-                    const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     children: _blips.entries.map((e) {
-                      final percent =
-                      (1 - e.value.distNorm).clamp(0.0, 1.0);
+                      final percent = (1 - e.value.distNorm).clamp(0.0, 1.0);
                       return Container(
                         width: w * 0.4,
-                        margin: const EdgeInsets.symmetric(
-                            horizontal: 8),
+                        margin: const EdgeInsets.symmetric(horizontal: 8),
                         padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppColors.card,
-                          borderRadius:
-                          BorderRadius.circular(16),
-                        ),
+                        decoration: BoxDecoration(color: Colors.grey[850], borderRadius: BorderRadius.circular(16)),
                         child: Column(
-                          mainAxisAlignment:
-                          MainAxisAlignment.center,
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(
-                                e.key.substring(
-                                    e.key.length - 5),
-                                style: const TextStyle(
-                                    color: Colors.white)),
+                            Text(e.key.substring(e.key.length - 5),
+                                style: const TextStyle(color: Colors.white)),
                             const SizedBox(height: 8),
                             LinearProgressIndicator(
                               value: percent,
-                              backgroundColor:
-                              Colors.white12,
-                              valueColor:
-                              const AlwaysStoppedAnimation(
-                                  AppColors.beam),
+                              backgroundColor: Colors.white12,
+                              valueColor: AlwaysStoppedAnimation(Colors.tealAccent),
                             ),
                             const SizedBox(height: 4),
                             Text('${(percent * 100).toInt()}%',
-                                style: const TextStyle(
-                                    color:
-                                    Colors.white70,
-                                    fontSize: 12)),
+                                style: const TextStyle(color: Colors.white70, fontSize: 12)),
                           ],
                         ),
                       );
@@ -573,24 +496,16 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
                 ),
               const Spacer(),
               Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 32, vertical: 24),
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
                 child: ElevatedButton.icon(
-                  onPressed:
-                  _isScanning ? _stopScan : _startScan,
-                  icon: Icon(
-                      _isScanning ? Icons.stop : Icons.search),
-                  label: Text(_isScanning
-                      ? 'Stop Scanning'
-                      : 'Start Scan'),
+                  onPressed: _isScanning ? _stopScan : _startScan,
+                  icon: Icon(_isScanning ? Icons.stop : Icons.search),
+                  label: Text(_isScanning ? 'Stop Scanning' : 'Start Scan'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.card,
-                    foregroundColor:
-                    AppColors.textPrimary,
+                    backgroundColor: Colors.grey[800],
+                    foregroundColor: Colors.white,
                     minimumSize: const Size.fromHeight(56),
-                    shape: RoundedRectangleBorder(
-                        borderRadius:
-                        BorderRadius.circular(30)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                   ),
                 ),
               ),
@@ -606,13 +521,4 @@ class DeviceBlip {
   final double angle;
   final double distNorm;
   DeviceBlip(this.angle, this.distNorm);
-}
-
-class AppColors {
-  static const backgroundStart = Color(0xFF004D43);
-  static const backgroundEnd = Color(0xFF046307);
-  static const card = Color(0xFF1E1E1E);
-  static const beam = Color(0xFF00D38C);
-  static const textPrimary = Colors.white;
-  static const textSecondary = Colors.white70;
 }

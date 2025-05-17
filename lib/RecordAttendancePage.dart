@@ -35,6 +35,7 @@ class _RecordAttendancePageState extends State<RecordAttendancePage> {
   int absenceCount = 0;
   int _warningLevel = 0;
   Map<String, int> _allWarnings = {};
+  DateTime? _lastAttendanceDate; // NEW: track the most recent attended date
 
   @override
   void initState() {
@@ -49,7 +50,6 @@ class _RecordAttendancePageState extends State<RecordAttendancePage> {
     if (user == null) return;
     final uid = user.uid;
 
-    // All courses under students/$uid/attendance
     final allAtt = await _dbService.read(path: 'students/$uid/attendance')
     as Map<String, dynamic>?;
 
@@ -84,19 +84,14 @@ class _RecordAttendancePageState extends State<RecordAttendancePage> {
     final uid = user.uid;
     final course = widget.selectedCourse;
 
-    // Read from the exact same path your TakeAttendancePage writes to:
     final attendanceData = await _dbService
-        .read(path: 'students/$uid/attendance/$course') as Map<String, dynamic>? ??
-        {};
+        .read(path: 'students/$uid/attendance/$course')
+    as Map<String, dynamic>? ?? {};
 
-    // (Optional) per‐session metadata—if you ever add descriptions under
-    // students/$uid/attendance/$course/sessions/<dateKey>
     final sessionsData = await _dbService
         .read(path: 'students/$uid/attendance/$course/sessions')
-    as Map<String, dynamic>? ??
-        {};
+    as Map<String, dynamic>? ?? {};
 
-    // Range: account‐creation → today
     final created = user.metadata.creationTime ?? DateTime.now();
     var dt = DateTime(created.year, created.month, created.day);
     final todayDt = DateTime.now();
@@ -108,7 +103,6 @@ class _RecordAttendancePageState extends State<RecordAttendancePage> {
     while (!dt.isAfter(today)) {
       final dateKey = DateFormat('dd-MM-yyyy').format(dt);
 
-      // Default absent
       String status = 'absent';
       String time = '';
 
@@ -122,7 +116,6 @@ class _RecordAttendancePageState extends State<RecordAttendancePage> {
         }
       }
 
-      // session‐level override of course description
       String courseDesc = course;
       if (sessionsData[dateKey] is Map<String, dynamic>) {
         final raw = sessionsData[dateKey]['desc'] as String?;
@@ -139,6 +132,12 @@ class _RecordAttendancePageState extends State<RecordAttendancePage> {
       dt = dt.add(const Duration(days: 1));
     }
 
+    // NEW: find the most recent attended session
+    DateTime? lastDate;
+    if (attended > 0) {
+      lastDate = list.lastWhere((r) => r.status == 'attended').date;
+    }
+
     final totalDays = list.length;
     final absCount = totalDays - attended;
     var wl = 0;
@@ -151,6 +150,7 @@ class _RecordAttendancePageState extends State<RecordAttendancePage> {
       attendanceCount = attended;
       absenceCount = absCount;
       _warningLevel = wl;
+      _lastAttendanceDate = lastDate; // NEW
       _loading = false;
     });
   }
@@ -194,7 +194,6 @@ class _RecordAttendancePageState extends State<RecordAttendancePage> {
           'time': '00:00',
         },
       );
-      // reload both warnings & the table
       await _loadAllWarnings();
       await _loadAttendanceData();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -222,7 +221,6 @@ class _RecordAttendancePageState extends State<RecordAttendancePage> {
               : Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ── All‐courses warnings ───────────────
               if (_allWarnings.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -255,8 +253,6 @@ class _RecordAttendancePageState extends State<RecordAttendancePage> {
                     ),
                   ),
                 ),
-
-              // ── Header ───────────────
               Padding(
                 padding: const EdgeInsets.symmetric(
                     horizontal: 24.0, vertical: 16.0),
@@ -295,8 +291,6 @@ class _RecordAttendancePageState extends State<RecordAttendancePage> {
                   ],
                 ),
               ),
-
-              // ── Selected‐course warning ─────────────
               Padding(
                 padding:
                 const EdgeInsets.symmetric(vertical: 8.0),
@@ -314,10 +308,7 @@ class _RecordAttendancePageState extends State<RecordAttendancePage> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 12),
-
-              // ── Stats ───────────────────────
               Padding(
                 padding:
                 const EdgeInsets.symmetric(horizontal: 24.0),
@@ -334,10 +325,7 @@ class _RecordAttendancePageState extends State<RecordAttendancePage> {
                   ],
                 ),
               ),
-
               const SizedBox(height: 16),
-
-              // ── History table ───────────────────
               Padding(
                 padding: const EdgeInsets.symmetric(
                     horizontal: 24.0),
@@ -351,7 +339,6 @@ class _RecordAttendancePageState extends State<RecordAttendancePage> {
                 ),
               ),
               const SizedBox(height: 8),
-
               Expanded(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -394,8 +381,10 @@ class _RecordAttendancePageState extends State<RecordAttendancePage> {
                       ),
                     ],
                     rows: _history.map((rec) {
-                      final isAttended =
-                          rec.status == 'attended';
+                      final isAttended = rec.status == 'attended';
+                      // NEW: only allow deletion of the most recent attended session
+                      final isLastAttended =
+                          isAttended && rec.date == _lastAttendanceDate;
                       return DataRow(cells: [
                         DataCell(Text(
                           isAttended ? 'Attended' : 'Absent',
@@ -426,7 +415,7 @@ class _RecordAttendancePageState extends State<RecordAttendancePage> {
                               color: Colors.white70),
                         )),
                         DataCell(
-                          isAttended
+                          isLastAttended
                               ? IconButton(
                             icon: const Icon(
                               Icons.delete,
