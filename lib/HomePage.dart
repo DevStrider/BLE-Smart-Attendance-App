@@ -21,9 +21,9 @@ class _HomePageState extends State<HomePage>
   final List<String> courses = [
     'Transmission & Switching (NETW601)', // slot 0: 08:00–09:00
     'Networks Lab (NETW602)',            // slot 1: 09:15–10:15
-    'Computer Architecture (NETW603)',   // slot 2: 10:30–11:30
+    'Intro to Management (MNGT601)',   // slot 2: 10:30–11:30
     'Network Protocols (NETW703)',       // slot 3: 11:45–12:45
-    'Intro to Management (MNGT601)',     // slot 4: 13:00–14:00
+    'Computer Architecture (NETW603)',     // slot 4: 13:00–14:00
     'Modeling & Simulation (NETW707)',   // slot 5: 14:15–15:15
     'Channel Coding (COMM604)',          // slot 6: 15:30–16:30
   ];

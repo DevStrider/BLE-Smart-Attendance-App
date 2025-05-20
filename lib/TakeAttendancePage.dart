@@ -393,14 +393,14 @@ class _TakeAttendancePageState extends State<TakeAttendancePage>
     final w = MediaQuery.of(context).size.width * 0.8;
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.teal[800],
+        backgroundColor: Color(0xFF004D43),
         iconTheme: const IconThemeData(color: Colors.white),
         title: Text('Take Attendance', style: GoogleFonts.poppins(color: Colors.white, fontSize: 20)),
       ),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Colors.teal, Colors.tealAccent],
+            colors: [Color(0xFF004D43), Color(0xFF046307)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
